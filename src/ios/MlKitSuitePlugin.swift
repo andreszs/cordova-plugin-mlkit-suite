@@ -1,5 +1,9 @@
 import AVFoundation
 import Foundation
+import MLKitBarcodeScanning
+import MLKitTextRecognition
+import MLKitVision
+import UIKit
 import WebKit
 
 #if canImport(Cordova)
@@ -24,7 +28,18 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "autoCapture": true
             ],
             "barcode": [
+                "scan": false,
+                "scanImage": true,
+                "bundled": true,
+                "formats": Self.barcodeFormatNames
+            ],
+            "document": [
                 "scan": false
+            ],
+            "text": [
+                "recognize": true,
+                "bundled": true,
+                "scripts": ["LATIN"]
             ]
         ]
         commandDelegate.send(
@@ -38,6 +53,86 @@ final class MlKitSuitePlugin: CDVPlugin {
         sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
                   message: "Barcode scanning is currently available on Android only.",
                   recoverable: false)
+    }
+
+    @objc(documentScan:)
+    func documentScan(_ command: CDVInvokedUrlCommand) {
+        sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
+                  message: "ML Kit Document Scanner is currently available on Android only.",
+                  recoverable: false)
+    }
+
+    @objc(recognizeText:)
+    func recognizeText(_ command: CDVInvokedUrlCommand) {
+        guard let rawPath = command.argument(at: 0) as? String,
+              !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: "imagePath must be a non-empty string.", recoverable: false)
+            return
+        }
+        commandDelegate.run(inBackground: { [weak self] in
+            guard let self = self else { return }
+            do {
+                let image = try self.visionImage(rawPath)
+                let recognizer = TextRecognizer.textRecognizer(options: TextRecognizerOptions())
+                recognizer.process(image) { result, error in
+                    if error != nil || result == nil {
+                        self.sendError(callbackId: command.callbackId, code: "PROCESSING_FAILED",
+                                       message: "Unable to recognize text in the image.", recoverable: true)
+                        return
+                    }
+                    self.commandDelegate.send(
+                        CDVPluginResult(status: CDVCommandStatus.ok, messageAs: result?.text ?? ""),
+                        callbackId: command.callbackId
+                    )
+                }
+            } catch {
+                self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
+                               message: "Unable to open imagePath.", recoverable: false)
+            }
+        })
+    }
+
+    @objc(scanBarcodes:)
+    func scanBarcodes(_ command: CDVInvokedUrlCommand) {
+        guard let rawPath = command.argument(at: 0) as? String,
+              !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: "imagePath must be a non-empty string.", recoverable: false)
+            return
+        }
+        do {
+            let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
+            let formats = try Self.barcodeFormats(dictionary)
+            commandDelegate.run(inBackground: { [weak self] in
+                guard let self = self else { return }
+                do {
+                    let image = try self.visionImage(rawPath)
+                    let options = BarcodeScannerOptions(formats: formats)
+                    let scanner = BarcodeScanner.barcodeScanner(options: options)
+                    scanner.process(image) { barcodes, error in
+                        if error != nil || barcodes == nil {
+                            self.sendError(callbackId: command.callbackId, code: "PROCESSING_FAILED",
+                                           message: "Unable to scan barcodes in the image.", recoverable: true)
+                            return
+                        }
+                        let payload = (barcodes ?? []).map { self.barcodeDictionary($0) }
+                        self.commandDelegate.send(
+                            CDVPluginResult(status: CDVCommandStatus.ok, messageAs: payload),
+                            callbackId: command.callbackId
+                        )
+                    }
+                } catch {
+                    self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
+                                   message: "Unable to open imagePath.", recoverable: false)
+                }
+            })
+        } catch let error as MlKitSuiteError {
+            sendErrorPayload(callbackId: command.callbackId, payload: error.payload)
+        } catch {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: error.localizedDescription, recoverable: false)
+        }
     }
 
     @objc(faceCapture:)
@@ -138,6 +233,115 @@ final class MlKitSuitePlugin: CDVPlugin {
         let scheme = viewController?.appScheme ?? "app"
         let hostname = (commandDelegate.settings["hostname"] as? String) ?? "localhost"
         return "\(scheme)://\(hostname)\(Self.imagePathPrefix)\(fileName)"
+    }
+
+    private func visionImage(_ rawPath: String) throws -> VisionImage {
+        let value = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let path: String
+        if let url = URL(string: value), url.isFileURL {
+            path = url.path
+        } else if let url = URL(string: value), url.path.hasPrefix(Self.imagePathPrefix) {
+            let fileName = url.lastPathComponent
+            let cache = try cacheDirectory().standardizedFileURL
+            let file = cache.appendingPathComponent(fileName).standardizedFileURL
+            guard file.deletingLastPathComponent() == cache else {
+                throw MlKitSuiteError.invalidArgument("imagePath is outside the plugin cache.")
+            }
+            path = file.path
+        } else {
+            path = value
+        }
+        guard let image = UIImage(contentsOfFile: path) else {
+            throw MlKitSuiteError.processingFailed("Unable to decode imagePath.", false)
+        }
+        let visionImage = VisionImage(image: image)
+        visionImage.orientation = image.imageOrientation
+        return visionImage
+    }
+
+    private static let barcodeFormatNames = [
+        "AZTEC", "CODABAR", "CODE_39", "CODE_93", "CODE_128", "DATA_MATRIX",
+        "EAN_8", "EAN_13", "ITF", "PDF_417", "QR_CODE", "UPC_A", "UPC_E"
+    ]
+
+    private static func barcodeFormats(_ dictionary: [String: Any]) throws -> BarcodeFormat {
+        for key in dictionary.keys where key != "formats" {
+            throw MlKitSuiteError.invalidArgument("Unknown barcode image option: \(key).")
+        }
+        guard let raw = dictionary["formats"], !(raw is NSNull) else { return .all }
+        let values: [String]
+        if let array = raw as? [String] {
+            values = array
+        } else if let string = raw as? String {
+            values = string.components(separatedBy: ",")
+        } else {
+            throw MlKitSuiteError.invalidArgument(
+                "formats must be an array of strings or a comma-separated string."
+            )
+        }
+        guard !values.isEmpty else {
+            throw MlKitSuiteError.invalidArgument("formats must not be empty.")
+        }
+        var result: BarcodeFormat = []
+        for rawValue in values {
+            let name = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased().replacingOccurrences(of: "-", with: "_")
+            switch name == "PDF417" ? "PDF_417" : name {
+            case "AZTEC": result.insert(.aztec)
+            case "CODABAR": result.insert(.codaBar)
+            case "CODE_39": result.insert(.code39)
+            case "CODE_93": result.insert(.code93)
+            case "CODE_128": result.insert(.code128)
+            case "DATA_MATRIX": result.insert(.dataMatrix)
+            case "EAN_8": result.insert(.EAN8)
+            case "EAN_13": result.insert(.EAN13)
+            case "ITF": result.insert(.ITF)
+            case "PDF_417": result.insert(.PDF417)
+            case "QR_CODE": result.insert(.qrCode)
+            case "UPC_A": result.insert(.UPCA)
+            case "UPC_E": result.insert(.UPCE)
+            default:
+                throw MlKitSuiteError.invalidArgument("Unsupported barcode format: \(rawValue).")
+            }
+        }
+        return result
+    }
+
+    private func barcodeDictionary(_ barcode: Barcode) -> [String: Any] {
+        let frame = barcode.frame
+        let points: [[String: Double]] = barcode.cornerPoints.map {
+            let point = $0.cgPointValue
+            return ["x": Double(point.x), "y": Double(point.y)]
+        }
+        return [
+            "text": barcode.rawValue ?? barcode.displayValue ?? "",
+            "format": barcodeFormatName(barcode.format),
+            "valueType": barcode.valueType.rawValue,
+            "boundingBox": [
+                "x": Double(frame.origin.x), "y": Double(frame.origin.y),
+                "width": Double(frame.size.width), "height": Double(frame.size.height)
+            ],
+            "cornerPoints": points
+        ]
+    }
+
+    private func barcodeFormatName(_ format: BarcodeFormat) -> String {
+        switch format {
+        case .aztec: return "AZTEC"
+        case .codaBar: return "CODABAR"
+        case .code39: return "CODE_39"
+        case .code93: return "CODE_93"
+        case .code128: return "CODE_128"
+        case .dataMatrix: return "DATA_MATRIX"
+        case .EAN8: return "EAN_8"
+        case .EAN13: return "EAN_13"
+        case .ITF: return "ITF"
+        case .PDF417: return "PDF_417"
+        case .qrCode: return "QR_CODE"
+        case .UPCA: return "UPC_A"
+        case .UPCE: return "UPC_E"
+        default: return "UNKNOWN"
+        }
     }
 
     private func finishWithError(code: String, message: String, recoverable: Bool) {

@@ -72,8 +72,27 @@ if (mlKitFaceVersion == null || mlKitFaceVersion.trim().isEmpty()) {
 
 logger.lifecycle(
     "cordova-plugin-mlkit-suite: cordova-android ${cordovaAndroidMajor}, " +
-    "CameraX ${cameraXVersion}, ML Kit Face Detection ${mlKitFaceVersion}"
+    "CameraX ${cameraXVersion}, ML Kit Face Detection ${mlKitFaceVersion}, " +
+    'Text Recognition 16.0.1, Barcode Scanning 17.2.0, Document Scanner 16.0.0'
 )
+
+// The document scanner currently resolves ML Kit Common 18.11.0, which in
+// turn requests AndroidX releases whose AAR metadata requires compileSdk 33.
+// cordova-android 11 intentionally compiles with SDK 32, so keep its AndroidX
+// graph on the compatible line used by that Cordova release. This does not
+// change the app's minSdk or affect cordova-android 12+.
+if (cordovaAndroidMajor == 11) {
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.appcompat:appcompat:1.4.2'
+            force 'androidx.appcompat:appcompat-resources:1.4.2'
+            force 'androidx.activity:activity:1.5.1'
+            force 'androidx.core:core:1.8.0'
+            force 'androidx.core:core-ktx:1.8.0'
+            force 'androidx.annotation:annotation-experimental:1.2.0'
+        }
+    }
+}
 
 dependencies {
     implementation "androidx.camera:camera-core:${cameraXVersion}"
@@ -86,6 +105,8 @@ dependencies {
     implementation 'com.google.guava:listenablefuture:1.0'
     implementation "com.google.mlkit:face-detection:${mlKitFaceVersion}"
     implementation 'com.google.mlkit:barcode-scanning:17.2.0'
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
     compileOnly "androidx.webkit:webkit:${webKitByCordova[cordovaAndroidMajor]}"
 }
 

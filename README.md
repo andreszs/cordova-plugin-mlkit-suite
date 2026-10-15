@@ -2,23 +2,29 @@
 
 # cordova-plugin-mlkit-suite
 
-Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.1.0` provides guided face detection with automatic front-camera capture, plus a generic Android barcode scanner backed by the bundled ML Kit model.
+Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.1.0` includes guided face capture, camera and still-image barcode scanning, Latin text recognition, and the native Android document scanner.
 
 > [!WARNING]
-> This plugin is in active development. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
+> This plugin is in active development and has not been published to npm. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
 
 ## Table of contents
 
 - [Compatibility](#compatibility)
 - [Installation](#installation)
-- [Usage](#usage)
-  - [Capabilities](#capabilities)
-  - [Face capture](#face-capture)
-  - [Options](#options)
-  - [Optional checks](#optional-checks)
-  - [Barcode scanning](#barcode-scanning)
-  - [Barcode options](#barcode-options)
-- [Results](#results)
+- [API overview](#api-overview)
+- [Capabilities](#capabilities)
+- [Document scanning](#document-scanning)
+  - [Document options](#document-options)
+  - [Document result](#document-result)
+- [Text recognition](#text-recognition)
+- [Barcode detection in an image](#barcode-detection-in-an-image)
+- [Camera barcode scanning](#camera-barcode-scanning)
+  - [Barcode formats](#barcode-formats)
+  - [Camera barcode options](#camera-barcode-options)
+- [Face capture](#face-capture)
+  - [Face options](#face-options)
+  - [Optional face checks](#optional-face-checks)
+  - [Face result](#face-result)
 - [Cancellation and errors](#cancellation-and-errors)
 - [Architecture and behavior](#architecture-and-behavior)
 - [Dependencies and licenses](#dependencies-and-licenses)
@@ -29,41 +35,37 @@ Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.
 
 ## Compatibility
 
-The Android implementation supports `cordova-android` 11 through 15 from one codebase. It selects a CameraX version from the installed `cordova-android` major version.
+The Android implementation supports `cordova-android` 11 through 15 from one codebase. It selects tested CameraX and AndroidX versions from the installed `cordova-android` major version.
 
-| cordova-android | CameraX | ML Kit Face Detection | ML Kit Barcode Scanning | Reference toolchain |
-| --- | --- | --- | --- | --- |
-| 11.x | 1.1.0 | 16.1.5 | 17.2.0 | compileSdk 32 / AGP 7.2.1 / JDK 11 |
-| 12.x | 1.2.3 | 16.1.7 | 17.2.0 | compileSdk 33 / AGP 7.4.2 / JDK 11 |
-| 13.x | 1.4.2 | 16.1.7 | 17.2.0 | compileSdk 34 / AGP 8.3.0 / JDK 17 |
-| 14.x | 1.5.2 | 16.1.7 | 17.2.0 | compileSdk 35 / AGP 8.7.3 / JDK 17 |
-| 15.x | 1.6.0 | 16.1.7 | 17.2.0 | compileSdk 36 / AGP 8.10.1 / JDK 17 |
+| cordova-android | CameraX | Face Detection | Barcode Scanning | Text Recognition | Document Scanner | Reference toolchain |
+| --- | --- | --- | --- | --- | --- | --- |
+| 11.x | 1.1.0 | 16.1.5 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 32 / AGP 7.2.1 / JDK 11 |
+| 12.x | 1.2.3 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 33 / AGP 7.4.2 / JDK 11 |
+| 13.x | 1.4.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 34 / AGP 8.3.0 / JDK 17 |
+| 14.x | 1.5.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 35 / AGP 8.7.3 / JDK 17 |
+| 15.x | 1.6.0 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 36 / AGP 8.10.1 / JDK 17 |
 
-Android support starts at Android 5.1 / API 22 through `cordova-android` 11. The plugin uses bundled ML Kit models, so detection does not wait for a model download. `cordova-android` 11 uses Face Detection `16.1.5` because newer releases pull AndroidX metadata that requires compileSdk 33; Cordova Android 12–15 use `16.1.7`. Barcode Scanning is pinned to `com.google.mlkit:barcode-scanning:17.2.0` on every supported Android platform. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested dependency versions.
+Face capture, barcode processing, and text recognition support Android 5.1 / API 22 and newer. The Google Play services document scanner requires Android 6.0 / API 23 and at least 1.7 GB of total RAM. On an unsupported device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE`; the other modules remain available.
 
-The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. It uses the `GoogleMLKit/FaceDetection` CocoaPod `8.0.0`; the host therefore needs CocoaPods and a compatible Xcode toolchain.
+Face, barcode, and text models are bundled. The Android document-scanner UI and model are delivered dynamically by Google Play services and can require a first-use download. `cordova-android` 11 uses dependency versions compatible with compileSdk 32; newer Cordova Android versions use their normal modern dependency graph. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
+
+The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. Face capture, still-image barcode detection, and Latin text recognition use Google ML Kit CocoaPods `8.0.0`. Google does not provide the ML Kit Document Scanner API for iOS, and the camera barcode UI is currently Android-only; these methods reject with `UNSUPPORTED_PLATFORM` on iOS.
 
 ## Installation
 
-Install from npm:
-
-```bash
-cordova plugin add cordova-plugin-mlkit-suite
-```
-
-Or install directly from GitHub:
+Until an npm release is published, install directly from GitHub:
 
 ```bash
 cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git
 ```
 
-To test an unpublished checkout, install it by local path:
+To test a local checkout:
 
 ```bash
 cordova plugin add /absolute/path/to/cordova-plugin-mlkit-suite
 ```
 
-The plugin requests only camera access. Images are written to the application's private cache, so no storage or Photo Library permission is required.
+The plugin requests camera access. Generated images and PDFs are written to the application's private cache, so no storage or Photo Library permission is required.
 
 On iOS, configure the deployment target and a camera-purpose string in the host application's `config.xml`:
 
@@ -71,30 +73,176 @@ On iOS, configure the deployment target and a camera-purpose string in the host 
 <platform name="ios">
     <preference name="deployment-target" value="15.5" />
     <edit-config file="*-Info.plist" mode="merge" target="NSCameraUsageDescription">
-        <string>Use the camera to capture a face photo.</string>
+        <string>Use the camera to capture a photo.</string>
     </edit-config>
 </platform>
 ```
 
-## Usage
+## API overview
 
-### Capabilities
+| Method | Android | iOS | Purpose |
+| --- | --- | --- | --- |
+| `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
+| `MlKit.scanDocument(options)` | API 23+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
+| `MlKit.recognizeText(imagePath)` | yes | yes | Returns plain Latin-script text from a local image. |
+| `MlKit.scanBarcodes(imagePath, options)` | yes | yes | Returns every matching barcode detected in a local image. |
+| `MlKit.barcode.scan(options)` | yes | no | Opens a high-resolution rear-camera barcode scanner. |
+| `MlKit.face.capture(options)` | yes | yes | Opens guided front-camera face capture with automatic capture. |
 
-Use `getCapabilities()` when an application needs to discover the modules exposed by the installed plugin version:
+All methods return Promises. The plugin processes content locally and does not interpret, validate, upload, or transform decoded payloads for a particular country or document type.
+
+## Capabilities
+
+Use `getCapabilities()` to discover platform and device support:
 
 ```javascript
 const capabilities = await MlKit.getCapabilities();
 
-if (capabilities.face.capture) {
-    // Guided face capture is available.
+if (capabilities.document.scan && capabilities.document.deviceSupported) {
+    // The native document flow can be requested on this device.
 }
 ```
 
-On Android, version `0.1.0` reports the `face` and `barcode` modules. On iOS, `barcode.scan` is reported as unavailable and rejects with `UNSUPPORTED_PLATFORM` if called.
+The result describes `face`, `barcode`, `document`, and `text`. On Android, `offline` is `false` because the document scanner is dynamically delivered even though the face, barcode, and text models are bundled.
 
-### Face capture
+## Document scanning
 
-`MlKit.face.capture(options)` opens a full-screen native camera view and resolves after a valid photo is captured:
+`MlKit.scanDocument(options)` opens the Google ML Kit Document Scanner on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
+
+```javascript
+const result = await MlKit.scanDocument({
+    pageLimit: 4,
+    galleryImportAllowed: true,
+    resultFormats: ["JPEG", "PDF"],
+    scannerMode: "FULL"
+});
+
+if (result.status === "success") {
+    document.querySelector("img").src = result.pages[0].imageUri;
+    console.log(result.pdf && result.pdf.path);
+}
+```
+
+The method performs device checks before requesting the Google scanner. Android versions below API 23 and devices with less than 1.7 GB of total RAM reject with `UNSUPPORTED_DEVICE` instead of opening native scanner code.
+
+### Document options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pageLimit` | integer `1–100` | `1` | Maximum number of pages in one scan. |
+| `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
+| `resultFormats` | `string[] \| string` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `JPG` aliases `JPEG`. |
+| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL"` | `"FULL"` | Selects the native editing feature set. |
+
+Unknown options, invalid types, empty result formats, and out-of-range values reject with `INVALID_ARGUMENT`.
+
+### Document result
+
+```json
+{
+  "status": "success",
+  "pages": [
+    {
+      "imagePath": "/private/cache/mlkit-suite/document-...-page-1.jpg",
+      "imageUri": "https://localhost/_mlkit_suite_image_/document-...-page-1.jpg",
+      "mimeType": "image/jpeg",
+      "bytes": 182734,
+      "width": 1440,
+      "height": 1920
+    }
+  ],
+  "pdf": {
+    "path": "/private/cache/mlkit-suite/document-....pdf",
+    "uri": "https://localhost/_mlkit_suite_document_/document-....pdf",
+    "mimeType": "application/pdf",
+    "bytes": 251809,
+    "pageCount": 1
+  }
+}
+```
+
+`pages` is empty when JPEG was not requested. `pdf` is `null` when PDF was not requested. Use `imageUri` for an `<img>` inside the Cordova WebView. Native paths are intended for APIs such as `recognizeText()` and `scanBarcodes()`.
+
+## Text recognition
+
+`MlKit.recognizeText(imagePath)` runs the bundled Latin text recognizer against a local image and resolves to one plain string. An image containing no recognized text resolves to `""`.
+
+```javascript
+const text = await MlKit.recognizeText(result.pages[0].imagePath);
+console.log(text);
+```
+
+`imagePath` can be an absolute native file path, a `file:` URI, an Android `content:` URI, or an `imageUri` previously returned by this plugin. Remote HTTP images are not fetched.
+
+## Barcode detection in an image
+
+`MlKit.scanBarcodes(imagePath, options)` analyzes one existing local image and resolves to an array. It does not require the camera UI or two-frame confirmation.
+
+```javascript
+const barcodes = await MlKit.scanBarcodes(imagePath, {
+    formats: ["PDF_417", "QR_CODE"]
+});
+
+for (const barcode of barcodes) {
+    console.log(barcode.text, barcode.format);
+}
+```
+
+Omit `formats` to enable every supported format. Each detected value includes `text`, `format`, numeric `valueType`, `boundingBox`, and `cornerPoints`. An image containing no matching barcode resolves to `[]`.
+
+## Camera barcode scanning
+
+`MlKit.barcode.scan(options)` opens a full-screen rear-camera scanner on Android:
+
+```javascript
+const result = await MlKit.barcode.scan({
+    formats: ["PDF_417", "QR_CODE"],
+    showCloseButton: true,
+    showTorchButton: true,
+    instructionText: "Place a barcode inside the frame",
+    timeoutMs: 45000
+});
+
+if (result.status === "success") {
+    console.log(result.text, result.format);
+}
+```
+
+The analyzer requests `1920×1080` frames from CameraX. The actual stream is the closest high-resolution size supported by the selected camera and use-case combination. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format. A missing or different value resets confirmation.
+
+### Barcode formats
+
+Both barcode methods support all 13 formats exposed by the bundled ML Kit Barcode Scanning SDK:
+
+- `AZTEC`
+- `CODABAR`
+- `CODE_39`
+- `CODE_93`
+- `CODE_128`
+- `DATA_MATRIX`
+- `EAN_8`
+- `EAN_13`
+- `ITF`
+- `PDF_417`
+- `QR_CODE`
+- `UPC_A`
+- `UPC_E`
+
+`PDF417` is accepted as an alias of `PDF_417`. A comma-separated string is accepted in addition to an array.
+
+### Camera barcode options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `formats` | `string[] \| string \| null` | all formats | Formats to detect. Restricting formats generally improves speed. |
+| `showCloseButton` | `boolean` | `true` | Shows the native close button. Android Back still cancels when hidden. |
+| `showTorchButton` | `boolean` | `true` | Shows a torch toggle when the rear camera has flash hardware. |
+| `instructionText` | `string \| null` | `"Place a barcode inside the frame"` | Text shown above the guide. An empty string hides it. |
+| `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
+
+## Face capture
+
+`MlKit.face.capture(options)` opens a full-screen native front-camera view and resolves after a valid JPEG is captured:
 
 ```javascript
 const result = await MlKit.face.capture({
@@ -117,98 +265,38 @@ const result = await MlKit.face.capture({
     },
     timeoutMs: 45000
 });
-
-if (result.status === "cancelled") {
-    return;
-}
-
-document.querySelector("img").src = result.imageUri;
 ```
 
-The native view always uses the front camera and portrait orientation. Capture starts automatically only after all enabled checks remain acceptable for a short stability window.
+Capture starts automatically only after all enabled checks remain acceptable for a short stability window.
 
-### Options
+### Face options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `outputWidth` | integer `320–2048` | `600` | Exact JPEG width in pixels. |
-| `outputHeight` | integer `320–2048` | `720` | Exact JPEG height in pixels. Together with width, defines the crop aspect ratio. |
+| `outputHeight` | integer `320–2048` | `720` | Exact JPEG height in pixels and crop aspect ratio. |
 | `jpegQuality` | integer `50–100` | `95` | JPEG encoding quality. |
-| `showCloseButton` | `boolean` | `true` | Shows the native close button. Android Back still cancels when hidden. |
-| `debugMode` | `boolean` | `false` | Shows the detected face rectangle and live quality values. It does not weaken validation. |
-| `instructionText` | `string \| null` | `"Place your face inside the oval"` | Text displayed above the guide. An empty string hides it. |
+| `showCloseButton` | `boolean` | `true` | Shows the native close button. |
+| `debugMode` | `boolean` | `false` | Shows face bounds and live quality values without weakening validation. |
+| `instructionText` | `string \| null` | `"Place your face inside the oval"` | Text shown above the guide. An empty string hides it. |
 | `checks` | `object \| null` | all enabled | Enables or disables individual capture gates. |
-| `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables the timeout. |
+| `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
-Unknown options, invalid types, and out-of-range numbers reject with `INVALID_ARGUMENT`. This prevents configuration typos from silently changing capture behavior.
-
-### Optional checks
+### Optional face checks
 
 | Check | Default | Purpose |
 | --- | --- | --- |
 | `singleFace` | `true` | Requires exactly one detected face. |
-| `faceSize` | `true` | Rejects faces that are too small or too close to the camera. |
-| `centering` | `true` | Requires the face to remain near the guide center. |
+| `faceSize` | `true` | Rejects faces that are too small or too close. |
+| `centering` | `true` | Requires the face near the guide center. |
 | `pose` | `true` | Limits head yaw, pitch, and roll. |
-| `eyesOpen` | `true` | Requires both eye-open probabilities to pass the configured internal threshold. |
+| `eyesOpen` | `true` | Requires both eye-open probabilities to pass the internal threshold. |
 | `neutralExpression` | `true` | Rejects a high smiling probability. |
-| `stability` | `true` | Requires a stable face position before automatic capture. |
+| `stability` | `true` | Requires a stable face position before capture. |
 | `sharpness` | `true` | Rejects low-detail frames and final images. |
 | `brightness` | `true` | Rejects images that are too dark or too bright. |
 
-Disabling a check removes that specific gate. The final still photo is always passed through ML Kit again before it is returned.
-
-### Barcode scanning
-
-`MlKit.barcode.scan(options)` opens a full-screen rear-camera scanner on Android. It supports every format exposed by ML Kit Barcode Scanning `17.2.0` and enables all of them when `formats` is omitted:
-
-- `AZTEC`
-- `CODABAR`
-- `CODE_39`
-- `CODE_93`
-- `CODE_128`
-- `DATA_MATRIX`
-- `EAN_8`
-- `EAN_13`
-- `ITF`
-- `PDF_417`
-- `QR_CODE`
-- `UPC_A`
-- `UPC_E`
-
-```javascript
-const result = await MlKit.barcode.scan({
-    formats: ["PDF_417", "QR_CODE"],
-    showCloseButton: true,
-    showTorchButton: true,
-    instructionText: "Place the barcode inside the frame",
-    timeoutMs: 45000
-});
-
-if (result.status === "success") {
-    console.log(result.text, result.format);
-}
-```
-
-The analyzer requests `1920×1080` frames from CameraX. The actual stream is the closest high-resolution size supported by the selected camera and use-case combination. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format. A frame without a decoded value, or with a different value or format, resets confirmation.
-
-The scanner is content-agnostic: it does not interpret, validate, upload, or transform the decoded payload.
-
-### Barcode options
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `formats` | `string[] \| string \| null` | all formats | Formats to detect. A comma-separated string is also accepted. Restricting formats generally improves speed. `PDF417` is accepted as an alias of `PDF_417`. |
-| `showCloseButton` | `boolean` | `true` | Shows the native close button. Android Back still cancels when hidden. |
-| `showTorchButton` | `boolean` | `true` | Shows a torch toggle when the rear camera has flash hardware. |
-| `instructionText` | `string \| null` | `"Place a barcode inside the frame"` | Text displayed above the guide. An empty string hides it. |
-| `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables the timeout. |
-
-## Results
-
-### Face capture result
-
-A successful capture resolves with an object like this:
+### Face result
 
 ```json
 {
@@ -220,10 +308,7 @@ A successful capture resolves with an object like this:
   "mimeType": "image/jpeg",
   "bytes": 78421,
   "capturedAt": "2026-10-15T12:34:56.789Z",
-  "quality": {
-    "brightness": 0.57,
-    "sharpness": 0.41
-  },
+  "quality": { "brightness": 0.57, "sharpness": 0.41 },
   "face": {
     "yaw": 1.2,
     "pitch": -0.8,
@@ -246,23 +331,11 @@ A successful capture resolves with an object like this:
 }
 ```
 
-Use `imageUri` in the Cordova WebView. `imagePath` is the native absolute path and is provided for native interoperability; it is not a portable WebView URL. Cache files are temporary and may be removed by the operating system.
-
-### Barcode scan result
-
-```json
-{
-  "status": "success",
-  "text": "decoded payload",
-  "format": "QR_CODE"
-}
-```
-
-`text` is ML Kit's raw decoded string and is returned unchanged. `format` is one of the supported format names listed above.
+Cache files are temporary and may be removed by the operating system.
 
 ## Cancellation and errors
 
-User cancellation resolves rather than rejects:
+User cancellation of an interactive native UI resolves rather than rejects:
 
 ```javascript
 { "status": "cancelled", "reason": "user" }
@@ -272,86 +345,92 @@ Other failures reject with a stable shape:
 
 ```json
 {
-  "code": "CAMERA_PERMISSION_DENIED",
-  "message": "Camera permission was denied.",
-  "recoverable": true
+  "code": "UNSUPPORTED_DEVICE",
+  "message": "ML Kit Document Scanner requires Android 6.0 or newer and at least 1.7 GB of total RAM.",
+  "recoverable": false
 }
 ```
 
-Error codes currently include:
-
 | Code | Meaning |
 | --- | --- |
-| `INVALID_ARGUMENT` | An option or check is invalid. |
-| `BUSY` | Another capture session is active. |
+| `INVALID_ARGUMENT` | An argument, option, or check is invalid. |
+| `INVALID_IMAGE` | The supplied local image cannot be opened or decoded. |
+| `BUSY` | Another interactive native session is active. |
 | `CAMERA_PERMISSION_DENIED` | Camera permission is unavailable. |
-| `CAMERA_UNAVAILABLE` | A front camera or camera pipeline could not be opened. |
-| `CAPTURE_FAILED` | No acceptable final photo was obtained. |
-| `PROCESSING_FAILED` | The captured photo could not be decoded, cropped, or encoded. |
-| `TIMEOUT` | The configured session timeout elapsed. |
+| `CAMERA_UNAVAILABLE` | The requested camera or pipeline could not be opened. |
+| `CAPTURE_FAILED` | No acceptable final face photo was obtained. |
+| `PROCESSING_FAILED` | ML Kit or output persistence could not complete. |
+| `SCANNER_UNAVAILABLE` | The document scanner could not be downloaded, initialized, or opened. |
+| `UNSUPPORTED_DEVICE` | The current Android version, memory, or Google implementation does not support the document scanner. |
 | `UNSUPPORTED_PLATFORM` | The requested module is not implemented on the current platform. |
+| `TIMEOUT` | The configured interactive-session timeout elapsed. |
 
 ## Architecture and behavior
 
-- The JavaScript namespace is module-oriented: `MlKit.face` and `MlKit.barcode` are independent modules, and future ML Kit APIs can be added as siblings.
-- Android uses CameraX for preview, analysis, and still capture. iOS uses AVFoundation for the equivalent camera pipeline.
-- Android barcode scanning uses the rear camera, high-resolution analysis, optional torch control, format filtering, and two-frame confirmation.
-- Live detection uses ML Kit's fast mode with classification enabled. The captured still is reprocessed using accurate mode and landmarks before it is accepted.
-- The preview checks one face, framing, head pose, open eyes, expression, lighting, sharpness, and temporal stability.
-- The final JPEG is cropped around the detected face at the requested aspect ratio, resized to the exact requested dimensions, and stored in private cache.
-- Processing is on-device. The plugin does not upload, transmit, or retain images outside its cache directory.
+- The JavaScript namespace is module-oriented and leaves room for additional ML Kit APIs.
+- Android uses CameraX for camera preview, analysis, and still capture; iOS uses AVFoundation for face capture.
+- Android document scanning delegates its UI to the Google Play services ML Kit scanner and copies selected outputs into private application cache.
+- Android and iOS use bundled Latin text-recognition and barcode-scanning models for still images.
+- Camera barcode scanning is generic, uses the rear camera, supports format filtering and torch control, and confirms a value across two frames.
+- Face capture uses live validation and reprocesses the final still before accepting it.
+- The plugin never applies country-specific document parsing or validation.
+- Processing is on-device. The plugin contains no upload or analytics code.
 
-Face detection is not face recognition, identity verification, presentation-attack detection, or liveness detection. Applications that require those properties must implement and validate them separately.
+Face detection is not face recognition, identity verification, presentation-attack detection, or liveness detection. Applications requiring those properties must implement and validate them separately.
 
 ## Dependencies and licenses
 
-- [Google ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) under its published Google SDK terms.
+- [Google ML Kit Document Scanner](https://developers.google.com/ml-kit/vision/doc-scanner) under the Google APIs Terms of Service.
+- [Google ML Kit Text Recognition](https://developers.google.com/ml-kit/vision/text-recognition/v2) under its published Google SDK terms.
 - [Google ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) under its published Google SDK terms.
+- [Google ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) under its published Google SDK terms.
 - [AndroidX CameraX](https://developer.android.com/media/camera/camerax) under the Apache License 2.0.
 - AVFoundation, UIKit, Core Image, and WebKit are Apple system frameworks.
 
-The plugin source is licensed under the Apache License 2.0. Installing this plugin also installs platform dependencies whose own licenses and terms apply.
+The plugin source is licensed under Apache License 2.0. Platform dependencies retain their own licenses and terms.
 
 ## Privacy
 
-The plugin requests camera permission and processes camera frames locally. It does not include analytics, advertising, network upload code, face recognition, or persistent biometric storage. The host application controls what happens to a returned JPEG and is responsible for its privacy disclosures, retention policy, consent flow, transport security, and regulatory compliance.
+The plugin requests camera permission and processes camera frames and selected local images. It does not include analytics, advertising, network upload code, face recognition, or persistent biometric storage. The document scanner is provided dynamically through Google Play services. The host application controls returned files and is responsible for privacy disclosures, consent, retention, transport security, and regulatory compliance.
 
 The included Apple privacy manifest declares no tracking, collected data, or required-reason API use by the plugin itself. Host applications and transitive SDKs must provide their own accurate manifests.
 
 ## Known limitations
 
-- Quality thresholds are heuristics and require calibration across devices, skin tones, lighting conditions, camera optics, and accessibility needs.
-- Eye and smile probabilities may be unavailable for some detections; enabled checks conservatively reject missing eye probabilities.
-- The oval is a visual guide, not a mask. The returned JPEG is rectangular.
-- Front-camera preview mirroring and final-image orientation can vary by device camera implementation and must be verified on the supported device matrix.
-- Cache URLs are session-local artifacts, not durable storage.
-- A physical device is required to validate camera behavior. Simulators can validate plugin integration and compilation only.
-- Barcode scanning is currently Android-only; iOS reports the module as unavailable.
-- Enabling all barcode formats is the most flexible mode but may be slower than selecting expected formats.
+- The document scanner is Android-only, requires API 23 and at least 1.7 GB RAM, depends on Google Play services, and can require a first-use component download.
+- Camera barcode scanning is currently Android-only. Still-image barcode detection is available on both platforms.
+- Text recognition currently includes only the bundled Latin script recognizer.
+- Static-image APIs accept local resources only and do not download remote URLs.
+- Face quality thresholds are heuristics and require calibration across devices, skin tones, lighting, optics, and accessibility needs.
+- The face oval is a visual guide; the returned JPEG is rectangular.
+- Cache URLs are session-local and are not durable storage.
+- A physical device is required to validate camera and document-scanner behavior.
+- The iOS implementation must be compiled and device-tested on macOS with a compatible Xcode and CocoaPods toolchain.
 
 ## Tests
 
-Run the JavaScript API contract test:
+Run the JavaScript and Java contract tests:
 
 ```bash
 npm test
 ```
 
-Before release, validate plugin installation and build at least one application with each supported Cordova Android major. Build the iOS implementation with `cordova-ios` 8.x on macOS, then test the full camera flow on physical devices.
+Before release, validate installation and a debug build with each supported Cordova Android major. Build iOS with `cordova-ios` 8.x on macOS, then test the native flows on physical devices.
 
 ## Changelog
 
 ### 0.1.0
 
+- Added Android `MlKit.scanDocument(options)` using the dynamically delivered ML Kit Document Scanner `16.0.0`.
+- Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 23, devices below 1.7 GB total RAM, and native unsupported responses.
+- Added `MlKit.recognizeText(imagePath)` on Android and iOS with bundled Latin text recognition.
+- Added `MlKit.scanBarcodes(imagePath, options)` on Android and iOS with all supported barcode formats.
 - Added Android `MlKit.barcode.scan(options)` using bundled ML Kit Barcode Scanning `17.2.0`.
-- Added all 13 ML Kit barcode formats with optional format filtering.
-- Added high-resolution `1920×1080` CameraX analysis, rear-camera preview, and optional torch control.
-- Added exact text-and-format confirmation across two consecutive analyzed frames.
-- Added structured barcode results, strict options, capability discovery, and iOS unsupported-platform reporting.
-- Kept barcode payload handling generic and country-agnostic.
-- Added the extensible `MlKit` JavaScript namespace and capability discovery.
+- Added high-resolution CameraX analysis, rear-camera preview, optional torch control, and two-frame barcode confirmation.
+- Kept all document and barcode payload handling generic and country-agnostic.
+- Added the extensible `MlKit` namespace and capability discovery.
 - Added `MlKit.face.capture(options)` for Android and iOS.
 - Added CameraX and AVFoundation front-camera flows with automatic capture.
-- Added ML Kit face count, framing, pose, eye, expression, stability, brightness, and sharpness checks.
-- Added final-still revalidation, rectangular crop, exact output sizing, JPEG encoding, private-cache storage, and WebView-safe image URLs.
-- Added strict option validation, structured errors, privacy metadata, and JavaScript API tests.
+- Added face count, framing, pose, eye, expression, stability, brightness, and sharpness checks.
+- Added final-still revalidation, exact output sizing, JPEG encoding, private-cache storage, and WebView-safe cache URLs.
+- Added strict option validation, structured errors, privacy metadata, and contract tests.

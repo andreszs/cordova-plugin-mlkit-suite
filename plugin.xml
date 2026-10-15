@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
         xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools"
         id="cordova-plugin-mlkit-suite"
         version="0.1.0">
     <name>ML Kit Suite</name>
-    <description>Extensible Google ML Kit suite with guided face capture and Android barcode scanning.</description>
+    <description>Extensible Google ML Kit suite for document, text, barcode, and guided face processing.</description>
     <license>Apache-2.0</license>
-    <keywords>cordova,android,ios,mlkit,ml-kit,face-detection,barcode-scanning,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+    <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,pdf417,qr-code,camera,camerax,avfoundation</keywords>
 
     <engines>
         <engine name="cordova" version=">=11.0.0" />
@@ -27,6 +28,8 @@
         </config-file>
 
         <config-file target="AndroidManifest.xml" parent="/manifest">
+            <uses-sdk xmlns:tools="http://schemas.android.com/tools"
+                tools:overrideLibrary="com.google.mlkit.vision.documentscanner" />
             <uses-permission android:name="android.permission.CAMERA" />
         </config-file>
 
@@ -38,6 +41,11 @@
                 android:theme="@style/MlKitSuiteFaceCaptureTheme" />
             <activity
                 android:name="com.andreszs.plugins.mlkitsuite.BarcodeScanActivity"
+                android:exported="false"
+                android:screenOrientation="sensorPortrait"
+                android:theme="@style/MlKitSuiteCameraTheme" />
+            <activity
+                android:name="com.andreszs.plugins.mlkitsuite.DocumentScanActivity"
                 android:exported="false"
                 android:screenOrientation="sensorPortrait"
                 android:theme="@style/MlKitSuiteCameraTheme" />
@@ -57,6 +65,9 @@
         <source-file src="src/android/java/BarcodeConfirmationTracker.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/BarcodeFrameAnalyzer.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/BarcodeOverlayView.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/DocumentScanConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/DocumentScanActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/StaticImageProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
     </platform>
 
     <platform name="ios">
@@ -84,6 +95,8 @@
             </config>
             <pods>
                 <pod name="GoogleMLKit/FaceDetection" spec="8.0.0" />
+                <pod name="GoogleMLKit/TextRecognition" spec="8.0.0" />
+                <pod name="GoogleMLKit/BarcodeScanning" spec="8.0.0" />
             </pods>
         </podspec>
     </platform>

@@ -75,6 +75,21 @@ final class BarcodeScanConfig {
         return values;
     }
 
+    static int[] imageFormatValuesFromJson(JSONObject options) {
+        JSONObject value = options == null ? new JSONObject() : options;
+        Iterator<String> keys = value.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!"formats".equals(key)) {
+                throw new IllegalArgumentException("Unknown barcode image option: " + key + ".");
+            }
+        }
+        List<String> names = parseFormats(value.opt("formats"));
+        int[] values = new int[names.size()];
+        for (int index = 0; index < names.size(); index++) values[index] = FORMATS.get(names.get(index));
+        return values;
+    }
+
     static String nameForFormat(int format) {
         for (Map.Entry<String, Integer> entry : FORMATS.entrySet()) {
             if (entry.getValue() == format) return entry.getKey();

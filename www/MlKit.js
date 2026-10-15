@@ -37,6 +37,52 @@ exports.getCapabilities = function getCapabilities() {
     return call('getCapabilities');
 };
 
+/**
+ * Opens the native document-scanner flow.
+ *
+ * @param {{pageLimit?: number, galleryImportAllowed?: boolean,
+ *          resultFormats?: string[]|string, scannerMode?: string}} options
+ * @returns {Promise<object>} Scanned JPEG pages/PDF or a cancellation result.
+ */
+exports.scanDocument = function scanDocument(options) {
+    return call('documentScan', [options || {}]);
+};
+
+/**
+ * Recognizes Latin-script text in an existing local image.
+ *
+ * @param {string} imagePath Native path, file/content URI, or plugin image URI.
+ * @returns {Promise<string>} Plain recognized text; empty when none is found.
+ */
+exports.recognizeText = function recognizeText(imagePath) {
+    if (typeof imagePath !== 'string' || !imagePath.trim()) {
+        return Promise.reject({
+            code: 'INVALID_ARGUMENT',
+            message: 'imagePath must be a non-empty string.',
+            recoverable: false
+        });
+    }
+    return call('recognizeText', [imagePath]);
+};
+
+/**
+ * Detects every supported barcode in an existing local image.
+ *
+ * @param {string} imagePath Native path, file/content URI, or plugin image URI.
+ * @param {{formats?: string[]|string}} options Optional format filter.
+ * @returns {Promise<object[]>} All detected barcodes; empty when none are found.
+ */
+exports.scanBarcodes = function scanBarcodes(imagePath, options) {
+    if (typeof imagePath !== 'string' || !imagePath.trim()) {
+        return Promise.reject({
+            code: 'INVALID_ARGUMENT',
+            message: 'imagePath must be a non-empty string.',
+            recoverable: false
+        });
+    }
+    return call('scanBarcodes', [imagePath, options || {}]);
+};
+
 exports.face = {
     /**
      * Opens the native front-camera guide and automatically captures a JPEG.

@@ -31,6 +31,20 @@ Promise.resolve()
         return MlKit.barcode.scan({ formats: ['PDF_417', 'QR_CODE'] });
     })
     .then(function () {
+        return MlKit.scanDocument({ pageLimit: 2, resultFormats: ['JPEG', 'PDF'] });
+    })
+    .then(function () { return MlKit.recognizeText('/cache/page-1.jpg'); })
+    .then(function () {
+        return MlKit.scanBarcodes('/cache/page-2.jpg', { formats: ['PDF_417'] });
+    })
+    .then(function () {
+        return MlKit.recognizeText('').then(function () {
+            throw new Error('Expected an empty imagePath to reject.');
+        }, function (error) {
+            assert.strictEqual(error.code, 'INVALID_ARGUMENT');
+        });
+    })
+    .then(function () {
         nextFailure = JSON.stringify({
             code: 'USER_CANCELLED',
             message: 'Cancelled.',
@@ -54,6 +68,9 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{ timeoutMs: 1000 }] },
             { service: 'MlKitSuite', action: 'barcodeScan', args: [{ formats: ['PDF_417', 'QR_CODE'] }] },
+            { service: 'MlKitSuite', action: 'documentScan', args: [{ pageLimit: 2, resultFormats: ['JPEG', 'PDF'] }] },
+            { service: 'MlKitSuite', action: 'recognizeText', args: ['/cache/page-1.jpg'] },
+            { service: 'MlKitSuite', action: 'scanBarcodes', args: ['/cache/page-2.jpg', { formats: ['PDF_417'] }] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] }
         ]);

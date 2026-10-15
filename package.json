@@ -1,7 +1,7 @@
 {
   "name": "cordova-plugin-mlkit-suite",
   "version": "0.1.0",
-  "description": "Extensible Google ML Kit suite for Cordova with guided face capture and Android barcode scanning.",
+  "description": "Extensible Google ML Kit suite for Cordova document, text, barcode, and guided face processing.",
   "license": "Apache-2.0",
   "author": "Andres Zs",
   "homepage": "https://github.com/andreszs/cordova-plugin-mlkit-suite",
@@ -20,6 +20,9 @@
     "ml-kit",
     "face-detection",
     "barcode-scanning",
+    "document-scanner",
+    "text-recognition",
+    "ocr",
     "pdf417",
     "qr-code",
     "camera",
