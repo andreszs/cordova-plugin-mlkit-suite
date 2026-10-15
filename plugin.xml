@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        id="cordova-plugin-mlkit-suite"
+        version="0.1.0">
+    <name>ML Kit Suite</name>
+    <description>Extensible Google ML Kit suite with guided face capture and Android barcode scanning.</description>
+    <license>Apache-2.0</license>
+    <keywords>cordova,android,ios,mlkit,ml-kit,face-detection,barcode-scanning,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+
+    <engines>
+        <engine name="cordova" version=">=11.0.0" />
+        <engine name="cordova-android" version=">=11.0.0 &lt;16.0.0" />
+        <engine name="cordova-ios" version=">=8.0.0 &lt;9.0.0" />
+    </engines>
+
+    <js-module src="www/MlKit.js" name="MlKit">
+        <clobbers target="MlKit" />
+    </js-module>
+
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="MlKitSuite">
+                <param name="android-package" value="com.andreszs.plugins.mlkitsuite.MlKitSuitePlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <config-file target="AndroidManifest.xml" parent="/manifest">
+            <uses-permission android:name="android.permission.CAMERA" />
+        </config-file>
+
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <activity
+                android:name="com.andreszs.plugins.mlkitsuite.FaceCaptureActivity"
+                android:exported="false"
+                android:screenOrientation="sensorPortrait"
+                android:theme="@style/MlKitSuiteFaceCaptureTheme" />
+            <activity
+                android:name="com.andreszs.plugins.mlkitsuite.BarcodeScanActivity"
+                android:exported="false"
+                android:screenOrientation="sensorPortrait"
+                android:theme="@style/MlKitSuiteCameraTheme" />
+        </config-file>
+
+        <framework src="src/android/mlkit-suite.gradle" custom="true" type="gradleReference" />
+        <resource-file src="src/android/res/values/mlkit_suite_styles.xml" target="res/values/mlkit_suite_styles.xml" />
+        <source-file src="src/android/java/MlKitSuitePlugin.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceCaptureActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceCaptureConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceCaptureModels.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceFrameAnalyzer.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceOverlayView.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceStillProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/BarcodeScanActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/BarcodeScanConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/BarcodeConfirmationTracker.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/BarcodeFrameAnalyzer.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/BarcodeOverlayView.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+    </platform>
+
+    <platform name="ios">
+        <config-file target="config.xml" parent="/*">
+            <feature name="MlKitSuite">
+                <param name="ios-package" value="MlKitSuitePlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <source-file src="src/ios/FaceCaptureTypes.swift" />
+        <source-file src="src/ios/FaceOverlayView.swift" />
+        <source-file src="src/ios/FaceStillProcessor.swift" />
+        <source-file src="src/ios/FaceCaptureViewController.swift" />
+        <source-file src="src/ios/MlKitSuitePlugin.swift" />
+        <resource-file src="src/ios/MlKitSuitePrivacy.bundle" target="MlKitSuitePrivacy.bundle" />
+
+        <framework src="AVFoundation.framework" />
+        <framework src="CoreImage.framework" />
+        <framework src="WebKit.framework" />
+
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/" />
+            </config>
+            <pods>
+                <pod name="GoogleMLKit/FaceDetection" spec="8.0.0" />
+            </pods>
+        </podspec>
+    </platform>
+</plugin>
+

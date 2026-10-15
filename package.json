@@ -1,0 +1,57 @@
+{
+  "name": "cordova-plugin-mlkit-suite",
+  "version": "0.1.0",
+  "description": "Extensible Google ML Kit suite for Cordova with guided face capture and Android barcode scanning.",
+  "license": "Apache-2.0",
+  "author": "Andres Zs",
+  "homepage": "https://github.com/andreszs/cordova-plugin-mlkit-suite",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreszs/cordova-plugin-mlkit-suite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/andreszs/cordova-plugin-mlkit-suite/issues"
+  },
+  "keywords": [
+    "cordova",
+    "android",
+    "ios",
+    "mlkit",
+    "ml-kit",
+    "face-detection",
+    "barcode-scanning",
+    "pdf417",
+    "qr-code",
+    "camera",
+    "camerax",
+    "avfoundation",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-ios"
+  ],
+  "cordova": {
+    "id": "cordova-plugin-mlkit-suite",
+    "platforms": [
+      "android",
+      "ios"
+    ]
+  },
+  "engines": [
+    {
+      "name": "cordova",
+      "version": ">=11.0.0"
+    }
+  ],
+  "files": [
+    "plugin.xml",
+    "www",
+    "src",
+    "tests",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node tests/js-api.test.js && node tests/java-confirmation.test.js"
+  }
+}
+
