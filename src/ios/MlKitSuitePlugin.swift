@@ -34,7 +34,8 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "formats": Self.barcodeFormatNames
             ],
             "document": [
-                "scan": false
+                "scan": false,
+                "prepare": false
             ],
             "text": [
                 "recognize": true,
@@ -57,6 +58,13 @@ final class MlKitSuitePlugin: CDVPlugin {
 
     @objc(documentScan:)
     func documentScan(_ command: CDVInvokedUrlCommand) {
+        sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
+                  message: "ML Kit Document Scanner is currently available on Android only.",
+                  recoverable: false)
+    }
+
+    @objc(prepareDocumentScanner:)
+    func prepareDocumentScanner(_ command: CDVInvokedUrlCommand) {
         sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
                   message: "ML Kit Document Scanner is currently available on Android only.",
                   recoverable: false)

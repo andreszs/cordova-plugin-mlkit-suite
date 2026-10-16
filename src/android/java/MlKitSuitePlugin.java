@@ -46,6 +46,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             processBarcodes(args, callbackContext);
             return true;
         }
+        if ("prepareDocumentScanner".equals(action)) {
+            prepareDocumentScanner(callbackContext);
+            return true;
+        }
         if (!("faceCapture".equals(action) || "barcodeScan".equals(action)
             || "documentScan".equals(action))) {
             return false;
@@ -246,6 +250,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             barcode.put("formats", BarcodeScanConfig.supportedFormatsJson());
             root.put("document", document);
             document.put("scan", true);
+            document.put("prepare", true);
             document.put(
                 "deviceSupported",
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && documentScannerDeviceSupported()
@@ -271,6 +276,20 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
         cordova.getThreadPool().execute(() -> StaticImageProcessor.recognizeText(
             cordova.getActivity().getApplicationContext(), imagePath, cache, callbackContext
+        ));
+    }
+
+    private void prepareDocumentScanner(CallbackContext callbackContext) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !documentScannerDeviceSupported()) {
+            callbackContext.error(error(
+                "UNSUPPORTED_DEVICE",
+                "ML Kit Document Scanner requires Android 6.0 or newer and at least 1.7 GB of total RAM.",
+                false
+            ));
+            return;
+        }
+        cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
+            cordova.getActivity(), callbackContext
         ));
     }
 

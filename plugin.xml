@@ -67,6 +67,7 @@
         <source-file src="src/android/java/BarcodeOverlayView.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/DocumentScanConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/DocumentScanActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/DocumentScannerModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/StaticImageProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
     </platform>
 

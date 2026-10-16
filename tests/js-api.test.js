@@ -31,6 +31,9 @@ Promise.resolve()
         return MlKit.barcode.scan({ formats: ['PDF_417', 'QR_CODE'] });
     })
     .then(function () {
+        return MlKit.prepareDocumentScanner();
+    })
+    .then(function () {
         return MlKit.scanDocument({ pageLimit: 2, resultFormats: ['JPEG', 'PDF'] });
     })
     .then(function () { return MlKit.recognizeText('/cache/page-1.jpg'); })
@@ -68,6 +71,7 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{ timeoutMs: 1000 }] },
             { service: 'MlKitSuite', action: 'barcodeScan', args: [{ formats: ['PDF_417', 'QR_CODE'] }] },
+            { service: 'MlKitSuite', action: 'prepareDocumentScanner', args: [] },
             { service: 'MlKitSuite', action: 'documentScan', args: [{ pageLimit: 2, resultFormats: ['JPEG', 'PDF'] }] },
             { service: 'MlKitSuite', action: 'recognizeText', args: ['/cache/page-1.jpg'] },
             { service: 'MlKitSuite', action: 'scanBarcodes', args: ['/cache/page-2.jpg', { formats: ['PDF_417'] }] },

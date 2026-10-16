@@ -83,6 +83,7 @@ On iOS, configure the deployment target and a camera-purpose string in the host 
 | Method | Android | iOS | Purpose |
 | --- | --- | --- | --- |
 | `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
+| `MlKit.prepareDocumentScanner()` | API 23+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
 | `MlKit.scanDocument(options)` | API 23+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
 | `MlKit.recognizeText(imagePath)` | yes | yes | Returns plain Latin-script text from a local image. |
 | `MlKit.scanBarcodes(imagePath, options)` | yes | yes | Returns every matching barcode detected in a local image. |
@@ -108,6 +109,19 @@ The result describes `face`, `barcode`, `document`, and `text`. On Android, `off
 ## Document scanning
 
 `MlKit.scanDocument(options)` opens the Google ML Kit Document Scanner on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
+
+The scanner UI, logic, and models are an on-demand Google Play services component. Call `prepareDocumentScanner()` before opening the scanner when the application wants to show its own progress UI during a possible first-use download. It resolves immediately when the component is already available and otherwise resolves only after installation completes:
+
+```javascript
+showProgress("Preparing scanner… First use may take a moment.");
+try {
+    await MlKit.prepareDocumentScanner();
+} finally {
+    hideProgress();
+}
+```
+
+Applications may use any progress UI. The plugin does not impose a spinner dependency.
 
 ```javascript
 const result = await MlKit.scanDocument({
@@ -361,6 +375,8 @@ Other failures reject with a stable shape:
 | `CAPTURE_FAILED` | No acceptable final face photo was obtained. |
 | `PROCESSING_FAILED` | ML Kit or output persistence could not complete. |
 | `SCANNER_UNAVAILABLE` | The document scanner could not be downloaded, initialized, or opened. |
+| `MODULE_DOWNLOAD_CANCELLED` | Google Play services cancelled the scanner-component installation. |
+| `MODULE_DOWNLOAD_FAILED` | Google Play services could not install the scanner component. |
 | `UNSUPPORTED_DEVICE` | The current Android version, memory, or Google implementation does not support the document scanner. |
 | `UNSUPPORTED_PLATFORM` | The requested module is not implemented on the current platform. |
 | `TIMEOUT` | The configured interactive-session timeout elapsed. |
@@ -421,6 +437,7 @@ Before release, validate installation and a debug build with each supported Cord
 
 ### 0.1.0
 
+- Added `MlKit.prepareDocumentScanner()` so applications can display progress while Google Play services installs the on-demand scanner component.
 - Added Android `MlKit.scanDocument(options)` using the dynamically delivered ML Kit Document Scanner `16.0.0`.
 - Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 23, devices below 1.7 GB total RAM, and native unsupported responses.
 - Added `MlKit.recognizeText(imagePath)` on Android and iOS with bundled Latin text recognition.

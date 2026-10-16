@@ -49,6 +49,16 @@ exports.scanDocument = function scanDocument(options) {
 };
 
 /**
+ * Ensures that the Google Play services Document Scanner component is ready.
+ * Applications can show progress UI while this Promise is pending.
+ *
+ * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
+ */
+exports.prepareDocumentScanner = function prepareDocumentScanner() {
+    return call('prepareDocumentScanner');
+};
+
+/**
  * Recognizes Latin-script text in an existing local image.
  *
  * @param {string} imagePath Native path, file/content URI, or plugin image URI.
