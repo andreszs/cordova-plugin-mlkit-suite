@@ -11,11 +11,12 @@ Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.
 
 - [Compatibility](#compatibility)
 - [Installation](#installation)
+  - [Android: bundled models](#android-bundled-models)
+  - [Android: Google Play services](#android-google-play-services)
+  - [Change the Android delivery mode](#change-the-android-delivery-mode)
+  - [Advanced per-module configuration](#advanced-per-module-configuration)
+  - [iOS setup](#ios-setup)
 - [Android model delivery](#android-model-delivery)
-  - [Install with a delivery mode](#install-with-a-delivery-mode)
-  - [Switch modes](#switch-modes)
-  - [Manual source configuration](#manual-source-configuration)
-  - [Choosing a delivery mode](#choosing-a-delivery-mode)
 - [API overview](#api-overview)
 - [Capabilities](#capabilities)
 - [Document scanning](#document-scanning)
@@ -58,19 +59,61 @@ The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer
 
 ## Installation
 
-Until an npm release is published, install directly from GitHub:
+> [!IMPORTANT]
+> Choose the Android model-delivery mode **before** installing the plugin. Omitting `ANDROID_MLKIT_MODEL_DELIVERY` selects `bundled`. See [Android model delivery](#android-model-delivery) for the size and first-use differences.
+
+Until an npm release is published, install directly from GitHub. Run the selected command from the Cordova application root.
+
+### Android: bundled models
+
+Bundled is the default. The explicit variable is recommended so the intended mode is visible in the project configuration:
+
+```bash
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=bundled
+```
+
+The shorter command below is equivalent because `bundled` is the default:
 
 ```bash
 cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git
 ```
 
-To test a local checkout:
+### Android: Google Play services
+
+To keep the application package smaller and download the Face Detection, Barcode Scanning, and Text Recognition modules through Google Play services:
 
 ```bash
-cordova plugin add /absolute/path/to/cordova-plugin-mlkit-suite
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=play-services
 ```
 
-The plugin requests camera access. Generated images and PDFs are written to the application's private cache, so no storage or Photo Library permission is required.
+For a local checkout, replace the GitHub URL in either command with `/absolute/path/to/cordova-plugin-mlkit-suite`.
+
+Cordova stores the selected value under `cordova.plugins["cordova-plugin-mlkit-suite"]` in the host application's `package.json`. The plugin's `plugin.xml` declares the variable and default; `src/android/mlkit-suite.gradle` applies the stored value during the Android build. Do not edit `plugin.xml`, `plugins/`, `platforms/android/`, or a generated Android manifest after installation.
+
+### Change the Android delivery mode
+
+The mode is compiled into the Android application and cannot change at runtime. Remove and add only this plugin with the new value, then rebuild:
+
+```bash
+cordova plugin rm cordova-plugin-mlkit-suite
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=play-services
+cordova clean android
+cordova build android
+```
+
+Use `bundled` in the same command to switch back. Merely editing `package.json` does not rewrite already installed native files; remove and add the plugin after changing the value.
+
+### Advanced per-module configuration
+
+The installation variable switches all three models together. A fork can mix delivery per module:
+
+- Edit [`src/android/mlkit-suite.gradle`](src/android/mlkit-suite.gradle) before installing the fork. Use `com.google.mlkit:*` for bundled delivery or the corresponding `com.google.android.gms:play-services-mlkit-*` dependency for Google Play services.
+- In that file, set `mlKitSuiteDependencyMetadataValue` to only the unbundled modules: `face`, `barcode`, and/or `ocr`. Use `com.google.mlkit.vision.DEPENDENCIES` as the metadata name whenever the list is non-empty.
+- Reinstall the plugin from that checkout. Never edit generated copies under `plugins/` or `platforms/android/`.
+
+The dependency and manifest metadata must agree. Metadata requests prefetch but does not remove a bundled model; changing only the dependency does not request prefetch. The current unbundled artifacts are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`.
+
+### iOS setup
 
 On iOS, configure the deployment target and a camera-purpose string in the host application's `config.xml`:
 
@@ -83,62 +126,11 @@ On iOS, configure the deployment target and a camera-purpose string in the host 
 </platform>
 ```
 
+The plugin requests camera access. Generated images and PDFs are written to the application's private cache, so no storage or Photo Library permission is required.
+
 ## Android model delivery
 
 ML Kit offers two [model installation paths](https://developers.google.com/ml-kit/tips/installation-paths) for Face Detection, Barcode Scanning, and Text Recognition: package each model inside the application, or request the corresponding module from Google Play services. This choice is independent of APK versus AAB packaging. An AAB removes unused CPU architectures from each device download, but it does not automatically convert a bundled ML Kit dependency into an on-demand one.
-
-The Android installation variable `ANDROID_MLKIT_MODEL_DELIVERY` selects one mode for all three modules. Accepted values are `bundled` and `play-services`; the default is `bundled`. Document Scanner is a separate component and is always delivered through Google Play services.
-
-### Install with a delivery mode
-
-Bundled (default, no variable required):
-
-```shell
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git
-```
-
-Explicitly bundled:
-
-```shell
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=bundled
-```
-
-Google Play services delivery:
-
-```shell
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=play-services
-```
-
-Run the command from the Cordova application root. Cordova records the selected variable under `cordova.plugins["cordova-plugin-mlkit-suite"]` in the application's `package.json`; do not edit `plugin.xml`, `plugins/`, `platforms/android/`, or a generated Android manifest after installation. The plugin uses the variable while it is installed to select Gradle dependencies and, for `play-services`, add `face,barcode,ocr` prefetch metadata.
-
-In short: the plugin's `plugin.xml` declares the variable and its `bundled` default, the host application's `package.json` stores the chosen value, and `src/android/mlkit-suite.gradle` applies it at Android build time. There is no post-install XML step.
-
-`MlKit.getCapabilities()` reports the effective value as `modelDelivery`, and each affected module reports its `bundled` boolean.
-
-### Switch modes
-
-The mode is compiled into the Android application and cannot be changed at runtime. To switch an existing installation, remove and add only this plugin with the new value, then rebuild:
-
-```shell
-cordova plugin rm cordova-plugin-mlkit-suite
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=play-services
-cordova clean android
-cordova build android
-```
-
-Use `bundled` in the same command to switch back. Reinstalling every plugin or recreating the whole project is unnecessary. Merely changing the saved value in `package.json` does not rewrite the already installed native files; remove/add the plugin after changing it.
-
-### Manual source configuration
-
-The variable is the recommended method. Manual edits remain useful for a fork that mixes delivery per module instead of switching all three together:
-
-- Edit [`src/android/mlkit-suite.gradle`](src/android/mlkit-suite.gradle) before installing the fork. Choose the `com.google.mlkit:*` dependency for bundled delivery or the corresponding `com.google.android.gms:play-services-mlkit-*` dependency for Google Play services.
-- In the same file, set `mlKitSuiteDependencyMetadataValue` to only the unbundled modules: `face`, `barcode`, and/or `ocr`. Use `com.google.mlkit.vision.DEPENDENCIES` as the metadata name whenever the list is non-empty.
-- Reinstall the plugin from that checkout. Never edit generated copies under `plugins/` or `platforms/android/`; Cordova replaces them.
-
-The dependency and manifest metadata must agree. Metadata requests prefetch but does not remove a bundled model; changing only the dependency does not request prefetch. The current unbundled artifacts are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`.
-
-### Choosing a delivery mode
 
 | Mode | Advantages | Trade-offs | Estimated current CA15 payload |
 | --- | --- | --- | --- |
@@ -147,7 +139,9 @@ The dependency and manifest metadata must agree. Metadata requests prefetch but 
 
 The bundled figures above are compressed-payload measurements from the current `cordova-android@15` debug APK using Face Detection `16.1.7`, Barcode Scanning `17.2.0`, and Text Recognition `16.0.1`. The universal APK contains approximately 37.1 MB of Face Detection files, 19.1 MB of Barcode Scanning files, and 42.3 MB of Text Recognition files. They total approximately 98.5 MB (93.9 MiB). A per-device AAB delivery retains one native ABI, reducing the combined model payload to roughly 21–33 MB depending on the device architecture. These figures estimate the incremental packaged files, not the final application size, and can change with dependency updates, ABI selection, compression, and release optimization.
 
-With `play-services`, the manifest requests installation of all three modules after a Play Store install. A sideloaded APK must not assume prefetch has completed: first use can trigger a download and may initially return no result. `MlKit.prepareDocumentScanner()` prepares only the separate Document Scanner component.
+With `play-services`, the manifest requests installation of all three modules after a Play Store install. A sideloaded APK must not assume prefetch has completed: first use can trigger a download and may initially return no result. `MlKit.getCapabilities()` reports the effective mode as `modelDelivery` and exposes each affected module's `bundled` flag.
+
+Document Scanner is separate from this choice: it is always delivered dynamically through Google Play services, and `MlKit.prepareDocumentScanner()` explicitly prepares only that component.
 
 ## API overview
 
