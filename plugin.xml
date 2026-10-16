@@ -20,6 +20,8 @@
     </js-module>
 
     <platform name="android">
+        <preference name="ANDROID_MLKIT_MODEL_DELIVERY" default="bundled" />
+
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="MlKitSuite">
                 <param name="android-package" value="com.andreszs.plugins.mlkitsuite.MlKitSuitePlugin" />
@@ -34,6 +36,12 @@
         </config-file>
 
         <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <meta-data
+                android:name="com.andreszs.plugins.mlkitsuite.MODEL_DELIVERY"
+                android:value="${mlKitSuiteModelDelivery}" />
+            <meta-data
+                android:name="${mlKitSuiteDependencyMetadataName}"
+                android:value="${mlKitSuiteDependencyMetadataValue}" />
             <activity
                 android:name="com.andreszs.plugins.mlkitsuite.FaceCaptureActivity"
                 android:exported="false"

@@ -22,10 +22,12 @@ final class MlKitSuitePlugin: CDVPlugin {
         let payload: [String: Any] = [
             "platform": "ios",
             "offline": true,
+            "modelDelivery": "bundled",
             "face": [
                 "capture": true,
                 "frontCamera": true,
-                "autoCapture": true
+                "autoCapture": true,
+                "bundled": true
             ],
             "barcode": [
                 "scan": false,

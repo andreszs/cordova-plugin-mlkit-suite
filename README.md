@@ -11,6 +11,11 @@ Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.
 
 - [Compatibility](#compatibility)
 - [Installation](#installation)
+- [Android model delivery](#android-model-delivery)
+  - [Install with a delivery mode](#install-with-a-delivery-mode)
+  - [Switch modes](#switch-modes)
+  - [Manual source configuration](#manual-source-configuration)
+  - [Choosing a delivery mode](#choosing-a-delivery-mode)
 - [API overview](#api-overview)
 - [Capabilities](#capabilities)
 - [Document scanning](#document-scanning)
@@ -45,9 +50,9 @@ The Android implementation supports `cordova-android` 11 through 15 from one cod
 | 14.x | 1.5.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 35 / AGP 8.7.3 / JDK 17 |
 | 15.x | 1.6.0 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 36 / AGP 8.10.1 / JDK 17 |
 
-Face capture, barcode processing, and text recognition support Android 5.1 / API 22 and newer. The Google Play services document scanner requires Android 6.0 / API 23 and at least 1.7 GB of total RAM. On an unsupported device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE`; the other modules remain available.
+With `bundled` delivery, face capture, barcode processing, and text recognition support Android 5.1 / API 22 and newer. `play-services` delivery and the Google Play services document scanner require Android 6.0 / API 23 or newer; the document scanner also requires at least 1.7 GB of total RAM. On an unsupported device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE`; the other modules remain available when their selected dependencies support the device.
 
-Face, barcode, and text models are bundled. The Android document-scanner UI and model are delivered dynamically by Google Play services and can require a first-use download. `cordova-android` 11 uses dependency versions compatible with compileSdk 32; newer Cordova Android versions use their normal modern dependency graph. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
+Face, barcode, and text models use the selected Android delivery mode; `bundled` is the default. The Android document-scanner UI and model are always delivered dynamically by Google Play services and can require a first-use download. See [Android model delivery](#android-model-delivery) for the available strategies. `cordova-android` 11 uses dependency versions compatible with compileSdk 32; newer Cordova Android versions use their normal modern dependency graph. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
 
 The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. Face capture, still-image barcode detection, and Latin text recognition use Google ML Kit CocoaPods `8.0.0`. Google does not provide the ML Kit Document Scanner API for iOS, and the camera barcode UI is currently Android-only; these methods reject with `UNSUPPORTED_PLATFORM` on iOS.
 
@@ -78,6 +83,72 @@ On iOS, configure the deployment target and a camera-purpose string in the host 
 </platform>
 ```
 
+## Android model delivery
+
+ML Kit offers two [model installation paths](https://developers.google.com/ml-kit/tips/installation-paths) for Face Detection, Barcode Scanning, and Text Recognition: package each model inside the application, or request the corresponding module from Google Play services. This choice is independent of APK versus AAB packaging. An AAB removes unused CPU architectures from each device download, but it does not automatically convert a bundled ML Kit dependency into an on-demand one.
+
+The Android installation variable `ANDROID_MLKIT_MODEL_DELIVERY` selects one mode for all three modules. Accepted values are `bundled` and `play-services`; the default is `bundled`. Document Scanner is a separate component and is always delivered through Google Play services.
+
+### Install with a delivery mode
+
+Bundled (default, no variable required):
+
+```shell
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git
+```
+
+Explicitly bundled:
+
+```shell
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=bundled
+```
+
+Google Play services delivery:
+
+```shell
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=play-services
+```
+
+Run the command from the Cordova application root. Cordova records the selected variable under `cordova.plugins["cordova-plugin-mlkit-suite"]` in the application's `package.json`; do not edit `plugin.xml`, `plugins/`, `platforms/android/`, or a generated Android manifest after installation. The plugin uses the variable while it is installed to select Gradle dependencies and, for `play-services`, add `face,barcode,ocr` prefetch metadata.
+
+In short: the plugin's `plugin.xml` declares the variable and its `bundled` default, the host application's `package.json` stores the chosen value, and `src/android/mlkit-suite.gradle` applies it at Android build time. There is no post-install XML step.
+
+`MlKit.getCapabilities()` reports the effective value as `modelDelivery`, and each affected module reports its `bundled` boolean.
+
+### Switch modes
+
+The mode is compiled into the Android application and cannot be changed at runtime. To switch an existing installation, remove and add only this plugin with the new value, then rebuild:
+
+```shell
+cordova plugin rm cordova-plugin-mlkit-suite
+cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git --variable ANDROID_MLKIT_MODEL_DELIVERY=play-services
+cordova clean android
+cordova build android
+```
+
+Use `bundled` in the same command to switch back. Reinstalling every plugin or recreating the whole project is unnecessary. Merely changing the saved value in `package.json` does not rewrite the already installed native files; remove/add the plugin after changing it.
+
+### Manual source configuration
+
+The variable is the recommended method. Manual edits remain useful for a fork that mixes delivery per module instead of switching all three together:
+
+- Edit [`src/android/mlkit-suite.gradle`](src/android/mlkit-suite.gradle) before installing the fork. Choose the `com.google.mlkit:*` dependency for bundled delivery or the corresponding `com.google.android.gms:play-services-mlkit-*` dependency for Google Play services.
+- In the same file, set `mlKitSuiteDependencyMetadataValue` to only the unbundled modules: `face`, `barcode`, and/or `ocr`. Use `com.google.mlkit.vision.DEPENDENCIES` as the metadata name whenever the list is non-empty.
+- Reinstall the plugin from that checkout. Never edit generated copies under `plugins/` or `platforms/android/`; Cordova replaces them.
+
+The dependency and manifest metadata must agree. Metadata requests prefetch but does not remove a bundled model; changing only the dependency does not request prefetch. The current unbundled artifacts are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`.
+
+### Choosing a delivery mode
+
+| Mode | Advantages | Trade-offs | Estimated current CA15 payload |
+| --- | --- | --- | --- |
+| `bundled` | Immediate offline first use; supports API 22 | Larger APK/AAB; model updates require a new app build | ~98.5 MB in a universal APK; ~21–33 MB in a single-ABI/AAB device delivery |
+| `play-services` | Much smaller application package; modules can be shared and updated by Google Play services | Requires API 23+, compatible Google Play services, storage and normally network on first use | Bundled payload avoided; small client libraries remain in the app |
+
+The bundled figures above are compressed-payload measurements from the current `cordova-android@15` debug APK using Face Detection `16.1.7`, Barcode Scanning `17.2.0`, and Text Recognition `16.0.1`. The universal APK contains approximately 37.1 MB of Face Detection files, 19.1 MB of Barcode Scanning files, and 42.3 MB of Text Recognition files. They total approximately 98.5 MB (93.9 MiB). A per-device AAB delivery retains one native ABI, reducing the combined model payload to roughly 21–33 MB depending on the device architecture. These figures estimate the incremental packaged files, not the final application size, and can change with dependency updates, ABI selection, compression, and release optimization.
+
+With `play-services`, the manifest requests installation of all three modules after a Play Store install. A sideloaded APK must not assume prefetch has completed: first use can trigger a download and may initially return no result. `MlKit.prepareDocumentScanner()` prepares only the separate Document Scanner component.
+
 ## API overview
 
 | Method | Android | iOS | Purpose |
@@ -104,7 +175,7 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 }
 ```
 
-The result describes `face`, `barcode`, `document`, and `text`. On Android, `offline` is `false` because the document scanner is dynamically delivered even though the face, barcode, and text models are bundled.
+The result describes `face`, `barcode`, `document`, and `text`. On Android, `modelDelivery` reports `bundled` or `play-services`; `face.bundled`, `barcode.bundled`, and `text.bundled` reflect that selection. `offline` remains `false` because the document scanner is always dynamically delivered.
 
 ## Document scanning
 
@@ -146,7 +217,10 @@ The method performs device checks before requesting the Google scanner. Android 
 | `pageLimit` | integer `1–100` | `1` | Maximum number of pages in one scan. |
 | `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
 | `resultFormats` | `string[] \| string` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `JPG` aliases `JPEG`. |
-| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL"` | `"FULL"` | Selects the native editing feature set. |
+| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL"` | `"FULL"` | Selects the native editing feature set. `BASE` still includes crop, rotation, page removal, and page reordering. |
+
+> [!IMPORTANT]
+> Google does not provide an option to disable crop and rotation in its Document Scanner UI. Even `BASE`, the least permissive mode, retains basic editing because the native flow is designed to leave the user in control of the pages returned to the application. Applications that require an immutable front/back capture must use a dedicated camera flow instead of `MlKit.scanDocument()`.
 
 Unknown options, invalid types, empty result formats, and out-of-range values reject with `INVALID_ARGUMENT`.
 
@@ -179,7 +253,7 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
 
 ## Text recognition
 
-`MlKit.recognizeText(imagePath)` runs the bundled Latin text recognizer against a local image and resolves to one plain string. An image containing no recognized text resolves to `""`.
+`MlKit.recognizeText(imagePath)` runs the Latin text recognizer selected by the Android delivery mode against a local image and resolves to one plain string. iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
 
 ```javascript
 const text = await MlKit.recognizeText(result.pages[0].imagePath);
@@ -226,7 +300,7 @@ The analyzer requests `1920×1080` frames from CameraX. The actual stream is the
 
 ### Barcode formats
 
-Both barcode methods support all 13 formats exposed by the bundled ML Kit Barcode Scanning SDK:
+Both barcode methods support all 13 formats exposed by ML Kit Barcode Scanning:
 
 - `AZTEC`
 - `CODABAR`
@@ -386,7 +460,7 @@ Other failures reject with a stable shape:
 - The JavaScript namespace is module-oriented and leaves room for additional ML Kit APIs.
 - Android uses CameraX for camera preview, analysis, and still capture; iOS uses AVFoundation for face capture.
 - Android document scanning delegates its UI to the Google Play services ML Kit scanner and copies selected outputs into private application cache.
-- Android and iOS use bundled Latin text-recognition and barcode-scanning models for still images.
+- Android uses the configured delivery mode for face, Latin text-recognition, and barcode-scanning models; iOS bundles its ML Kit pods.
 - Camera barcode scanning is generic, uses the rear camera, supports format filtering and torch control, and confirms a value across two frames.
 - Face capture uses live validation and reprocesses the final still before accepting it.
 - The plugin never applies country-specific document parsing or validation.
@@ -414,8 +488,9 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 ## Known limitations
 
 - The document scanner is Android-only, requires API 23 and at least 1.7 GB RAM, depends on Google Play services, and can require a first-use component download.
+- The Google Document Scanner always allows basic page editing, including crop and rotation; its native UI cannot be configured as an immutable front/back capture flow.
 - Camera barcode scanning is currently Android-only. Still-image barcode detection is available on both platforms.
-- Text recognition currently includes only the bundled Latin script recognizer.
+- Text recognition currently includes only the Latin script recognizer.
 - Static-image APIs accept local resources only and do not download remote URLs.
 - Face quality thresholds are heuristics and require calibration across devices, skin tones, lighting, optics, and accessibility needs.
 - The face oval is a visual guide; the returned JPEG is rectangular.
@@ -437,6 +512,7 @@ Before release, validate installation and a debug build with each supported Cord
 
 ### 0.1.0
 
+- Added the Android install variable `ANDROID_MLKIT_MODEL_DELIVERY` with `bundled` and `play-services` modes.
 - Added `MlKit.prepareDocumentScanner()` so applications can display progress while Google Play services installs the on-demand scanner component.
 - Added Android `MlKit.scanDocument(options)` using the dynamically delivered ML Kit Document Scanner `16.0.0`.
 - Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 23, devices below 1.7 GB total RAM, and native unsupported responses.

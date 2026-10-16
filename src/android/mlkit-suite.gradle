@@ -36,6 +36,35 @@ def mlKitSuiteReadCordovaAndroidMajor() {
     )
 }
 
+def mlKitSuiteReadModelDelivery() {
+    def stateCandidates = [
+        rootProject.file('../../plugins/fetch.json'),
+        rootProject.file('../plugins/fetch.json'),
+        rootProject.file('../../package.json'),
+        rootProject.file('../package.json')
+    ]
+    for (def stateFile : stateCandidates) {
+        if (!stateFile.exists()) {
+            continue
+        }
+        try {
+            def state = new JsonSlurper().parse(stateFile)
+            def pluginState = stateFile.name == 'fetch.json'
+                ? state['cordova-plugin-mlkit-suite']
+                : state.cordova?.plugins?.get('cordova-plugin-mlkit-suite')
+            def selected = pluginState?.variables?.ANDROID_MLKIT_MODEL_DELIVERY
+                ?: pluginState?.ANDROID_MLKIT_MODEL_DELIVERY
+            if (selected != null && !selected.toString().trim().isEmpty()) {
+                return selected.toString().trim()
+            }
+        } catch (Exception ignored) {
+            // A malformed Cordova state file is handled by the normal Cordova
+            // tooling. Keep looking for another persisted source here.
+        }
+    }
+    return 'bundled'
+}
+
 def cameraXByCordova = [
     11: '1.1.0',
     12: '1.2.3',
@@ -52,6 +81,13 @@ def webKitByCordova = [
 ]
 
 def cordovaAndroidMajor = mlKitSuiteReadCordovaAndroidMajor()
+def modelDelivery = mlKitSuiteReadModelDelivery()
+if (!(modelDelivery in ['bundled', 'play-services'])) {
+    throw new GradleException(
+        "cordova-plugin-mlkit-suite: invalid Android model delivery '${modelDelivery}'. " +
+        'Use bundled or play-services.'
+    )
+}
 def cameraXVersion = project.findProperty('mlKitSuiteCameraXVersion')?.toString()
 def mlKitFaceVersion = project.findProperty('mlKitSuiteFaceDetectionVersion')?.toString()
 if (cameraXVersion == null || cameraXVersion.trim().isEmpty()) {
@@ -72,9 +108,29 @@ if (mlKitFaceVersion == null || mlKitFaceVersion.trim().isEmpty()) {
 
 logger.lifecycle(
     "cordova-plugin-mlkit-suite: cordova-android ${cordovaAndroidMajor}, " +
-    "CameraX ${cameraXVersion}, ML Kit Face Detection ${mlKitFaceVersion}, " +
-    'Text Recognition 16.0.1, Barcode Scanning 17.2.0, Document Scanner 16.0.0'
+    "CameraX ${cameraXVersion}, model delivery ${modelDelivery}, " +
+    (modelDelivery == 'bundled'
+        ? "ML Kit Face Detection ${mlKitFaceVersion}, Text Recognition 16.0.1, Barcode Scanning 17.2.0, "
+        : 'Play services Face Detection 17.1.0, Text Recognition 19.0.1, Barcode Scanning 18.3.1, ') +
+    'Document Scanner 16.0.0'
 )
+
+android {
+    defaultConfig {
+        manifestPlaceholders.mlKitSuiteModelDelivery = modelDelivery
+        if (modelDelivery == 'play-services') {
+            manifestPlaceholders.mlKitSuiteDependencyMetadataName =
+                'com.google.mlkit.vision.DEPENDENCIES'
+            manifestPlaceholders.mlKitSuiteDependencyMetadataValue = 'face,barcode,ocr'
+        } else {
+            // Keep the manifest element inert in bundled mode. A placeholder is
+            // used because Cordova plugin.xml does not support conditional XML.
+            manifestPlaceholders.mlKitSuiteDependencyMetadataName =
+                'com.andreszs.plugins.mlkitsuite.BUNDLED_MODE'
+            manifestPlaceholders.mlKitSuiteDependencyMetadataValue = 'true'
+        }
+    }
+}
 
 // The document scanner currently resolves ML Kit Common 18.11.0, which in
 // turn requests AndroidX releases whose AAR metadata requires compileSdk 33.
@@ -103,9 +159,15 @@ dependencies {
     }
     implementation 'androidx.exifinterface:exifinterface:1.3.2'
     implementation 'com.google.guava:listenablefuture:1.0'
-    implementation "com.google.mlkit:face-detection:${mlKitFaceVersion}"
-    implementation 'com.google.mlkit:barcode-scanning:17.2.0'
-    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    if (modelDelivery == 'play-services') {
+        implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
+        implementation 'com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1'
+        implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
+    } else {
+        implementation "com.google.mlkit:face-detection:${mlKitFaceVersion}"
+        implementation 'com.google.mlkit:barcode-scanning:17.2.0'
+        implementation 'com.google.mlkit:text-recognition:16.0.1'
+    }
     implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
     compileOnly "androidx.webkit:webkit:${webKitByCordova[cordovaAndroidMajor]}"
 }

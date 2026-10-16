@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.webkit.WebResourceResponse;
@@ -27,6 +28,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     private static final int BARCODE_SCAN_REQUEST = 8613;
     private static final int DOCUMENT_SCAN_REQUEST = 8614;
     private static final long DOCUMENT_SCANNER_MINIMUM_MEMORY_BYTES = 1_700_000_000L;
+    private static final String MODEL_DELIVERY_METADATA =
+        "com.andreszs.plugins.mlkitsuite.MODEL_DELIVERY";
 
     private CallbackContext pendingCallback;
     private JSONObject pendingOptions;
@@ -234,17 +237,21 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject barcode = new JSONObject();
         JSONObject document = new JSONObject();
         JSONObject text = new JSONObject();
+        String modelDelivery = androidModelDelivery();
+        boolean bundledModels = "bundled".equals(modelDelivery);
         try {
             root.put("platform", "android");
             root.put("offline", false);
+            root.put("modelDelivery", modelDelivery);
             root.put("face", face);
             face.put("capture", true);
             face.put("frontCamera", true);
             face.put("autoCapture", true);
+            face.put("bundled", bundledModels);
             root.put("barcode", barcode);
             barcode.put("scan", true);
             barcode.put("scanImage", true);
-            barcode.put("bundled", true);
+            barcode.put("bundled", bundledModels);
             barcode.put("resolution", "1920x1080");
             barcode.put("confirmationFrames", 2);
             barcode.put("formats", BarcodeScanConfig.supportedFormatsJson());
@@ -261,10 +268,22 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             document.put("resultFormats", new JSONArray().put("JPEG").put("PDF"));
             root.put("text", text);
             text.put("recognize", true);
-            text.put("bundled", true);
+            text.put("bundled", bundledModels);
             text.put("scripts", new JSONArray().put("LATIN"));
         } catch (Exception ignored) { }
         return root;
+    }
+
+    private String androidModelDelivery() {
+        try {
+            ApplicationInfo applicationInfo = cordova.getActivity().getPackageManager()
+                .getApplicationInfo(cordova.getActivity().getPackageName(), PackageManager.GET_META_DATA);
+            if (applicationInfo.metaData != null) {
+                String value = applicationInfo.metaData.getString(MODEL_DELIVERY_METADATA, "bundled");
+                if ("play-services".equals(value)) return value;
+            }
+        } catch (Exception ignored) { }
+        return "bundled";
     }
 
     private void processText(JSONArray args, CallbackContext callbackContext) {
