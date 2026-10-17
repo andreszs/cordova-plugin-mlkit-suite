@@ -15,7 +15,9 @@ final class MlKitSuitePlugin: CDVPlugin {
     private static let imagePathPrefix = "/_mlkit_suite_image_/"
     private var pendingCallbackId: String?
     private var pendingOptions: FaceCaptureOptions?
+    private var pendingBarcodeOptions: BarcodeScanOptions?
     private weak var captureController: FaceCaptureViewController?
+    private weak var barcodeController: BarcodeScanViewController?
 
     @objc(getCapabilities:)
     func getCapabilities(_ command: CDVInvokedUrlCommand) {
@@ -32,11 +34,13 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "bundled": true
             ],
             "barcode": [
-                "scan": false,
+                "scan": true,
                 "scanImage": true,
                 "mode": "bundled",
                 "bundled": true,
-                "formats": Self.barcodeFormatNames
+                "resolution": "1920x1080",
+                "confirmationFrames": 2,
+                "formats": BarcodeFormatSupport.names
             ],
             "document": [
                 "scan": false,
@@ -68,9 +72,23 @@ final class MlKitSuitePlugin: CDVPlugin {
 
     @objc(barcodeScan:)
     func barcodeScan(_ command: CDVInvokedUrlCommand) {
-        sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
-                  message: "Barcode scanning is currently available on Android only.",
-                  recoverable: false)
+        guard pendingCallbackId == nil else {
+            sendError(callbackId: command.callbackId, code: "BUSY",
+                      message: "A camera session is already active.", recoverable: true)
+            return
+        }
+        do {
+            let dictionary = command.argument(at: 0) as? [String: Any] ?? [:]
+            let options = try BarcodeScanOptions(dictionary: dictionary)
+            pendingCallbackId = command.callbackId
+            pendingBarcodeOptions = options
+            requestCameraAndPresentBarcode(options)
+        } catch let error as MlKitSuiteError {
+            sendErrorPayload(callbackId: command.callbackId, payload: error.payload)
+        } catch {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: error.localizedDescription, recoverable: false)
+        }
     }
 
     @objc(documentScan:)
@@ -128,7 +146,10 @@ final class MlKitSuitePlugin: CDVPlugin {
         }
         do {
             let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
-            let formats = try Self.barcodeFormats(dictionary)
+            for key in dictionary.keys where key != "formats" && key != "moduleLoadingMessage" {
+                throw MlKitSuiteError.invalidArgument("Unknown barcode image option: \(key).")
+            }
+            let formats = try BarcodeFormatSupport.parse(dictionary["formats"])
             commandDelegate.run(inBackground: { [weak self] in
                 guard let self = self else { return }
                 do {
@@ -164,7 +185,7 @@ final class MlKitSuitePlugin: CDVPlugin {
     func faceCapture(_ command: CDVInvokedUrlCommand) {
         guard pendingCallbackId == nil else {
             sendError(callbackId: command.callbackId, code: "BUSY",
-                      message: "A face capture session is already active.", recoverable: true)
+                      message: "A camera session is already active.", recoverable: true)
             return
         }
         do {
@@ -183,6 +204,7 @@ final class MlKitSuitePlugin: CDVPlugin {
 
     override func onReset() {
         captureController?.abortForWebViewReset()
+        barcodeController?.abortForWebViewReset()
         clearPending()
     }
 
@@ -221,6 +243,44 @@ final class MlKitSuitePlugin: CDVPlugin {
         let controller = FaceCaptureViewController(options: options)
         controller.delegate = self
         captureController = controller
+        host.present(controller, animated: true)
+    }
+
+    private func requestCameraAndPresentBarcode(_ options: BarcodeScanOptions) {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            presentBarcodeScanner(options)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    if granted {
+                        self.presentBarcodeScanner(options)
+                    } else {
+                        self.finishWithError(code: "CAMERA_PERMISSION_DENIED",
+                                             message: "Camera permission was denied.", recoverable: true)
+                    }
+                }
+            }
+        case .denied, .restricted:
+            finishWithError(code: "CAMERA_PERMISSION_DENIED",
+                            message: "Camera permission was denied.", recoverable: true)
+        @unknown default:
+            finishWithError(code: "CAMERA_PERMISSION_DENIED",
+                            message: "Unable to determine camera permission.", recoverable: true)
+        }
+    }
+
+    private func presentBarcodeScanner(_ options: BarcodeScanOptions) {
+        guard pendingCallbackId != nil else { return }
+        guard let host = viewController else {
+            finishWithError(code: "CAMERA_UNAVAILABLE",
+                            message: "The application view controller is unavailable.", recoverable: false)
+            return
+        }
+        let controller = BarcodeScanViewController(options: options)
+        controller.delegate = self
+        barcodeController = controller
         host.present(controller, animated: true)
     }
 
@@ -284,54 +344,6 @@ final class MlKitSuitePlugin: CDVPlugin {
         return visionImage
     }
 
-    private static let barcodeFormatNames = [
-        "AZTEC", "CODABAR", "CODE_39", "CODE_93", "CODE_128", "DATA_MATRIX",
-        "EAN_8", "EAN_13", "ITF", "PDF_417", "QR_CODE", "UPC_A", "UPC_E"
-    ]
-
-    private static func barcodeFormats(_ dictionary: [String: Any]) throws -> BarcodeFormat {
-        for key in dictionary.keys where key != "formats" && key != "moduleLoadingMessage" {
-            throw MlKitSuiteError.invalidArgument("Unknown barcode image option: \(key).")
-        }
-        guard let raw = dictionary["formats"], !(raw is NSNull) else { return .all }
-        let values: [String]
-        if let array = raw as? [String] {
-            values = array
-        } else if let string = raw as? String {
-            values = string.components(separatedBy: ",")
-        } else {
-            throw MlKitSuiteError.invalidArgument(
-                "formats must be an array of strings or a comma-separated string."
-            )
-        }
-        guard !values.isEmpty else {
-            throw MlKitSuiteError.invalidArgument("formats must not be empty.")
-        }
-        var result: BarcodeFormat = []
-        for rawValue in values {
-            let name = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased().replacingOccurrences(of: "-", with: "_")
-            switch name == "PDF417" ? "PDF_417" : name {
-            case "AZTEC": result.insert(.aztec)
-            case "CODABAR": result.insert(.codaBar)
-            case "CODE_39": result.insert(.code39)
-            case "CODE_93": result.insert(.code93)
-            case "CODE_128": result.insert(.code128)
-            case "DATA_MATRIX": result.insert(.dataMatrix)
-            case "EAN_8": result.insert(.EAN8)
-            case "EAN_13": result.insert(.EAN13)
-            case "ITF": result.insert(.ITF)
-            case "PDF_417": result.insert(.PDF417)
-            case "QR_CODE": result.insert(.qrCode)
-            case "UPC_A": result.insert(.UPCA)
-            case "UPC_E": result.insert(.UPCE)
-            default:
-                throw MlKitSuiteError.invalidArgument("Unsupported barcode format: \(rawValue).")
-            }
-        }
-        return result
-    }
-
     private func barcodeDictionary(_ barcode: Barcode) -> [String: Any] {
         let frame = barcode.frame
         let points: [[String: Double]] = barcode.cornerPoints.map {
@@ -340,7 +352,7 @@ final class MlKitSuitePlugin: CDVPlugin {
         }
         return [
             "text": barcode.rawValue ?? barcode.displayValue ?? "",
-            "format": barcodeFormatName(barcode.format),
+            "format": BarcodeFormatSupport.name(for: barcode.format),
             "valueType": barcode.valueType.rawValue,
             "boundingBox": [
                 "x": Double(frame.origin.x), "y": Double(frame.origin.y),
@@ -348,25 +360,6 @@ final class MlKitSuitePlugin: CDVPlugin {
             ],
             "cornerPoints": points
         ]
-    }
-
-    private func barcodeFormatName(_ format: BarcodeFormat) -> String {
-        switch format {
-        case .aztec: return "AZTEC"
-        case .codaBar: return "CODABAR"
-        case .code39: return "CODE_39"
-        case .code93: return "CODE_93"
-        case .code128: return "CODE_128"
-        case .dataMatrix: return "DATA_MATRIX"
-        case .EAN8: return "EAN_8"
-        case .EAN13: return "EAN_13"
-        case .ITF: return "ITF"
-        case .PDF417: return "PDF_417"
-        case .qrCode: return "QR_CODE"
-        case .UPCA: return "UPC_A"
-        case .UPCE: return "UPC_E"
-        default: return "UNKNOWN"
-        }
     }
 
     private func finishWithError(code: String, message: String, recoverable: Bool) {
@@ -389,7 +382,9 @@ final class MlKitSuitePlugin: CDVPlugin {
     private func clearPending() {
         pendingCallbackId = nil
         pendingOptions = nil
+        pendingBarcodeOptions = nil
         captureController = nil
+        barcodeController = nil
     }
 
     private func round(_ value: CGFloat) -> Double {
@@ -484,6 +479,45 @@ extension MlKitSuitePlugin: FaceCaptureViewControllerDelegate {
     }
 
     func faceCapture(_ controller: FaceCaptureViewController, didFail error: MlKitSuiteError) {
+        guard let callbackId = pendingCallbackId else { return }
+        let payload = error.payload
+        controller.dismiss(animated: true) { [weak self] in
+            guard let self = self else { return }
+            self.clearPending()
+            self.sendErrorPayload(callbackId: callbackId, payload: payload)
+        }
+    }
+}
+
+extension MlKitSuitePlugin: BarcodeScanViewControllerDelegate {
+    func barcodeScan(_ controller: BarcodeScanViewController, didFinish result: BarcodeScanResult) {
+        guard let callbackId = pendingCallbackId, pendingBarcodeOptions != nil else { return }
+        let payload: [String: Any] = [
+            "status": "success",
+            "text": result.text,
+            "format": result.format
+        ]
+        controller.dismiss(animated: true) { [weak self] in
+            guard let self = self else { return }
+            self.clearPending()
+            self.commandDelegate.send(
+                CDVPluginResult(status: CDVCommandStatus.ok, messageAs: payload),
+                callbackId: callbackId
+            )
+        }
+    }
+
+    func barcodeScanDidCancel(_ controller: BarcodeScanViewController) {
+        guard let callbackId = pendingCallbackId else { return }
+        controller.dismiss(animated: true) { [weak self] in
+            guard let self = self else { return }
+            self.clearPending()
+            self.sendError(callbackId: callbackId, code: "USER_CANCELLED",
+                           message: "Barcode scanning was cancelled by the user.", recoverable: true)
+        }
+    }
+
+    func barcodeScan(_ controller: BarcodeScanViewController, didFail error: MlKitSuiteError) {
         guard let callbackId = pendingCallbackId else { return }
         let payload = error.payload
         controller.dismiss(animated: true) { [weak self] in

@@ -56,7 +56,7 @@ Selecting `install-time` or `first-use` for any module raises the generated Andr
 
 Face, Barcode, and OCR can select their delivery modes independently; all default to `install-time`. The Android document-scanner UI and model are always delivered dynamically by Google Play services and can require a first-use download. See [Android model delivery](#android-model-delivery) for the available strategies. `cordova-android` 11 uses dependency versions compatible with compileSdk 32; newer Cordova Android versions use their normal modern dependency graph. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
 
-The current Android Google Play services clients are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`. The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. Face capture, still-image barcode detection, and Latin text recognition use Google ML Kit CocoaPods `8.0.0`. Google does not provide the ML Kit Document Scanner API for iOS, and the camera barcode UI is currently Android-only; these methods reject with `UNSUPPORTED_PLATFORM` on iOS.
+The current Android Google Play services clients are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`. The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. Face capture, live and still-image barcode detection, and Latin text recognition use Google ML Kit CocoaPods `8.0.0`. Google does not provide the ML Kit Document Scanner API for iOS; document-scanner methods reject with `UNSUPPORTED_PLATFORM` there.
 
 ## Installation
 
@@ -190,7 +190,7 @@ Document Scanner is separate from this choice: it is always delivered dynamicall
 | `MlKit.scanDocument(options)` | API 23+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
 | `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
 | `MlKit.scanBarcodes(imagePath, options)` | yes | yes | Returns every matching barcode detected in a local image. |
-| `MlKit.barcode.scan(options)` | yes | no | Opens a high-resolution rear-camera barcode scanner. |
+| `MlKit.barcode.scan(options)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
 | `MlKit.face.capture(options)` | yes | yes | Opens guided front-camera face capture with automatic capture. |
 
 All methods return Promises. The plugin processes content locally and does not interpret, validate, upload, or transform decoded payloads for a particular country or document type.
@@ -312,7 +312,7 @@ Omit `formats` to enable every supported format. `moduleLoadingMessage` follows 
 
 ## Camera barcode scanning
 
-`MlKit.barcode.scan(options)` opens a full-screen rear-camera scanner on Android:
+`MlKit.barcode.scan(options)` opens a full-screen rear-camera scanner on Android and iOS:
 
 ```javascript
 const result = await MlKit.barcode.scan({
@@ -329,7 +329,7 @@ if (result.status === "success") {
 }
 ```
 
-The analyzer requests `1920×1080` frames from CameraX. The actual stream is the closest high-resolution size supported by the selected camera and use-case combination. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format. A missing or different value resets confirmation.
+Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format. A missing or different value resets confirmation.
 
 ### Barcode formats
 
@@ -494,7 +494,7 @@ Other failures reject with a stable shape:
 ## Architecture and behavior
 
 - The JavaScript namespace is module-oriented and leaves room for additional ML Kit APIs.
-- Android uses CameraX for camera preview, analysis, and still capture; iOS uses AVFoundation for face capture.
+- Android uses CameraX for camera preview, analysis, and still capture; iOS uses AVFoundation for face capture and live barcode scanning.
 - Android document scanning delegates its UI to the Google Play services ML Kit scanner and copies selected outputs into private application cache.
 - Android uses the configured delivery mode for face, Latin text-recognition, and barcode-scanning models; iOS bundles its ML Kit pods.
 - Camera barcode scanning is generic, uses the rear camera, supports format filtering and torch control, and confirms a value across two frames.
@@ -525,7 +525,6 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 
 - The document scanner is Android-only, requires API 23 and at least 1.7 GB RAM, depends on Google Play services, and can require a first-use component download.
 - The Google Document Scanner always allows basic page editing, including crop and rotation; its native UI cannot be configured as an immutable front/back capture flow.
-- Camera barcode scanning is currently Android-only. Still-image barcode detection is available on both platforms.
 - Text recognition currently includes only the Latin script recognizer.
 - Static-image APIs accept local resources only and do not download remote URLs.
 - Face quality thresholds are heuristics and require calibration across devices, skin tones, lighting, optics, and accessibility needs.
@@ -536,7 +535,7 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 
 ## Tests
 
-Run the JavaScript and Java contract tests:
+Run the JavaScript, Java confirmation, and iOS source-contract tests:
 
 ```bash
 npm test
@@ -557,8 +556,8 @@ Before release, validate installation and a debug build with each supported Cord
 - Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 23, devices below 1.7 GB total RAM, and native unsupported responses.
 - Added `MlKit.recognizeText(imagePath)` on Android and iOS with bundled Latin text recognition.
 - Added `MlKit.scanBarcodes(imagePath, options)` on Android and iOS with all supported barcode formats.
-- Added Android `MlKit.barcode.scan(options)` using bundled ML Kit Barcode Scanning `17.2.0`.
-- Added high-resolution CameraX analysis, rear-camera preview, optional torch control, and two-frame barcode confirmation.
+- Added `MlKit.barcode.scan(options)` on Android and iOS using ML Kit Barcode Scanning.
+- Added high-resolution CameraX and AVFoundation analysis, rear-camera preview, optional torch control, and two-frame barcode confirmation.
 - Kept all document and barcode payload handling generic and country-agnostic.
 - Added the extensible `MlKit` namespace and capability discovery.
 - Added `MlKit.face.capture(options)` for Android and iOS.

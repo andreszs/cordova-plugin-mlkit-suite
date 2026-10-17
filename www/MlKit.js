@@ -181,7 +181,7 @@ exports.face = {
 
 exports.barcode = {
     /**
-     * Opens the native Android barcode scanner. All ML Kit formats are enabled
+     * Opens the native Android or iOS barcode scanner. All ML Kit formats are enabled
      * by default; formats can be restricted to improve detection speed.
      *
      * @param {{formats?: string[]|string, showCloseButton?: boolean,

@@ -102,6 +102,9 @@
         <source-file src="src/ios/FaceOverlayView.swift" />
         <source-file src="src/ios/FaceStillProcessor.swift" />
         <source-file src="src/ios/FaceCaptureViewController.swift" />
+        <source-file src="src/ios/BarcodeScanTypes.swift" />
+        <source-file src="src/ios/BarcodeOverlayView.swift" />
+        <source-file src="src/ios/BarcodeScanViewController.swift" />
         <source-file src="src/ios/MlKitSuitePlugin.swift" />
         <resource-file src="src/ios/MlKitSuitePrivacy.bundle" target="MlKitSuitePrivacy.bundle" />
 
