@@ -18,7 +18,9 @@ import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Set;
 
 public final class MlKitSuitePlugin extends CordovaPlugin {
     private static final String IMAGE_WEB_PATH = "_mlkit_suite_image_/";
@@ -28,8 +30,12 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     private static final int BARCODE_SCAN_REQUEST = 8613;
     private static final int DOCUMENT_SCAN_REQUEST = 8614;
     private static final long DOCUMENT_SCANNER_MINIMUM_MEMORY_BYTES = 1_700_000_000L;
-    private static final String MODEL_DELIVERY_METADATA =
-        "com.andreszs.plugins.mlkitsuite.MODEL_DELIVERY";
+    private static final String FACE_MODE_METADATA =
+        "com.andreszs.plugins.mlkitsuite.FACE_MODE";
+    private static final String BARCODE_MODE_METADATA =
+        "com.andreszs.plugins.mlkitsuite.BARCODE_MODE";
+    private static final String OCR_MODE_METADATA =
+        "com.andreszs.plugins.mlkitsuite.OCR_MODE";
 
     private CallbackContext pendingCallback;
     private JSONObject pendingOptions;
@@ -47,6 +53,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
         if ("scanBarcodes".equals(action)) {
             processBarcodes(args, callbackContext);
+            return true;
+        }
+        if ("prepareModels".equals(action)) {
+            prepareModels(args, callbackContext);
             return true;
         }
         if ("prepareDocumentScanner".equals(action)) {
@@ -237,21 +247,27 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject barcode = new JSONObject();
         JSONObject document = new JSONObject();
         JSONObject text = new JSONObject();
-        String modelDelivery = androidModelDelivery();
-        boolean bundledModels = "bundled".equals(modelDelivery);
+        String faceMode = androidModuleMode(FACE_MODE_METADATA);
+        String barcodeMode = androidModuleMode(BARCODE_MODE_METADATA);
+        String ocrMode = androidModuleMode(OCR_MODE_METADATA);
+        String modelDelivery = aggregateDelivery(faceMode, barcodeMode, ocrMode);
+        String modelDownloadStrategy = aggregateMode(faceMode, barcodeMode, ocrMode);
         try {
             root.put("platform", "android");
             root.put("offline", false);
             root.put("modelDelivery", modelDelivery);
+            root.put("modelDownloadStrategy", modelDownloadStrategy);
             root.put("face", face);
             face.put("capture", true);
             face.put("frontCamera", true);
             face.put("autoCapture", true);
-            face.put("bundled", bundledModels);
+            face.put("mode", faceMode);
+            face.put("bundled", "bundled".equals(faceMode));
             root.put("barcode", barcode);
             barcode.put("scan", true);
             barcode.put("scanImage", true);
-            barcode.put("bundled", bundledModels);
+            barcode.put("mode", barcodeMode);
+            barcode.put("bundled", "bundled".equals(barcodeMode));
             barcode.put("resolution", "1920x1080");
             barcode.put("confirmationFrames", 2);
             barcode.put("formats", BarcodeScanConfig.supportedFormatsJson());
@@ -268,22 +284,39 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             document.put("resultFormats", new JSONArray().put("JPEG").put("PDF"));
             root.put("text", text);
             text.put("recognize", true);
-            text.put("bundled", bundledModels);
+            text.put("mode", ocrMode);
+            text.put("bundled", "bundled".equals(ocrMode));
             text.put("scripts", new JSONArray().put("LATIN"));
         } catch (Exception ignored) { }
         return root;
     }
 
-    private String androidModelDelivery() {
+    private String androidModuleMode(String metadataName) {
         try {
             ApplicationInfo applicationInfo = cordova.getActivity().getPackageManager()
                 .getApplicationInfo(cordova.getActivity().getPackageName(), PackageManager.GET_META_DATA);
             if (applicationInfo.metaData != null) {
-                String value = applicationInfo.metaData.getString(MODEL_DELIVERY_METADATA, "bundled");
-                if ("play-services".equals(value)) return value;
+                String value = applicationInfo.metaData.getString(metadataName, "install-time");
+                if ("bundled".equals(value) || "install-time".equals(value)
+                    || "first-use".equals(value)) {
+                    return value;
+                }
             }
         } catch (Exception ignored) { }
-        return "bundled";
+        return "install-time";
+    }
+
+    private static String aggregateDelivery(String faceMode, String barcodeMode, String ocrMode) {
+        boolean faceBundled = "bundled".equals(faceMode);
+        boolean barcodeBundled = "bundled".equals(barcodeMode);
+        boolean ocrBundled = "bundled".equals(ocrMode);
+        if (faceBundled && barcodeBundled && ocrBundled) return "bundled";
+        if (!faceBundled && !barcodeBundled && !ocrBundled) return "play-services";
+        return "mixed";
+    }
+
+    private static String aggregateMode(String faceMode, String barcodeMode, String ocrMode) {
+        return faceMode.equals(barcodeMode) && faceMode.equals(ocrMode) ? faceMode : "mixed";
     }
 
     private void processText(JSONArray args, CallbackContext callbackContext) {
@@ -310,6 +343,79 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
             cordova.getActivity(), callbackContext
         ));
+    }
+
+    private void prepareModels(JSONArray args, CallbackContext callbackContext) {
+        final Set<String> requestedModules;
+        try {
+            requestedModules = requestedModules(args);
+        } catch (IllegalArgumentException exception) {
+            callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
+            return;
+        }
+
+        boolean prepareFace = requestedModules.contains("face")
+            && !"bundled".equals(androidModuleMode(FACE_MODE_METADATA));
+        boolean prepareBarcode = requestedModules.contains("barcode")
+            && !"bundled".equals(androidModuleMode(BARCODE_MODE_METADATA));
+        boolean prepareOcr = requestedModules.contains("ocr")
+            && !"bundled".equals(androidModuleMode(OCR_MODE_METADATA));
+        if (!prepareFace && !prepareBarcode && !prepareOcr) {
+            JSONObject result = new JSONObject();
+            try {
+                result.put("status", "ready");
+                result.put("alreadyAvailable", true);
+            } catch (Exception ignored) { }
+            callbackContext.success(result);
+            return;
+        }
+        cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
+            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, callbackContext
+        ));
+    }
+
+    private static Set<String> requestedModules(JSONArray args) {
+        Set<String> result = new LinkedHashSet<>();
+        Object requested = args.opt(0);
+        if (requested == null || requested == JSONObject.NULL) {
+            result.add("face");
+            result.add("barcode");
+            result.add("ocr");
+            return result;
+        }
+        if (requested instanceof String) {
+            addRequestedModule(result, (String) requested);
+            return result;
+        }
+        if (requested instanceof JSONArray) {
+            JSONArray array = (JSONArray) requested;
+            if (array.length() == 0) {
+                throw new IllegalArgumentException("modules must not be an empty array.");
+            }
+            for (int index = 0; index < array.length(); index++) {
+                Object value = array.opt(index);
+                if (!(value instanceof String)) {
+                    throw new IllegalArgumentException(
+                        "modules may contain only face, barcode, or ocr."
+                    );
+                }
+                addRequestedModule(result, (String) value);
+            }
+            return result;
+        }
+        throw new IllegalArgumentException(
+            "modules must be face, barcode, ocr, or an array containing those names."
+        );
+    }
+
+    private static void addRequestedModule(Set<String> modules, String rawValue) {
+        String value = rawValue == null ? "" : rawValue.trim().toLowerCase(Locale.US);
+        if (!("face".equals(value) || "barcode".equals(value) || "ocr".equals(value))) {
+            throw new IllegalArgumentException(
+                "Unknown module '" + rawValue + "'. Use face, barcode, or ocr."
+            );
+        }
+        modules.add(value);
     }
 
     private void processBarcodes(JSONArray args, CallbackContext callbackContext) {

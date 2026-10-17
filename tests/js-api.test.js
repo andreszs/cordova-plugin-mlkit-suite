@@ -26,6 +26,8 @@ var MlKit = require('../www/MlKit');
 
 Promise.resolve()
     .then(function () { return MlKit.getCapabilities(); })
+    .then(function () { return MlKit.prepareModels(); })
+    .then(function () { return MlKit.prepareModels(['barcode', 'ocr']); })
     .then(function () { return MlKit.face.capture({ timeoutMs: 1000 }); })
     .then(function () {
         return MlKit.barcode.scan({ formats: ['PDF_417', 'QR_CODE'] });
@@ -39,6 +41,13 @@ Promise.resolve()
     .then(function () { return MlKit.recognizeText('/cache/page-1.jpg'); })
     .then(function () {
         return MlKit.scanBarcodes('/cache/page-2.jpg', { formats: ['PDF_417'] });
+    })
+    .then(function () {
+        return MlKit.prepareModels([]).then(function () {
+            throw new Error('Expected an empty modules array to reject.');
+        }, function (error) {
+            assert.strictEqual(error.code, 'INVALID_ARGUMENT');
+        });
     })
     .then(function () {
         return MlKit.recognizeText('').then(function () {
@@ -69,6 +78,8 @@ Promise.resolve()
     .then(function () {
         assert.deepStrictEqual(calls, [
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
+            { service: 'MlKitSuite', action: 'prepareModels', args: [] },
+            { service: 'MlKitSuite', action: 'prepareModels', args: [['barcode', 'ocr']] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{ timeoutMs: 1000 }] },
             { service: 'MlKitSuite', action: 'barcodeScan', args: [{ formats: ['PDF_417', 'QR_CODE'] }] },
             { service: 'MlKitSuite', action: 'prepareDocumentScanner', args: [] },

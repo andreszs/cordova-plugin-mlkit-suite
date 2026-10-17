@@ -20,7 +20,10 @@
     </js-module>
 
     <platform name="android">
-        <preference name="ANDROID_MLKIT_MODEL_DELIVERY" default="bundled" />
+        <preference name="ANDROID_MLKIT_MODEL_DELIVERY" default="install-time" />
+        <preference name="ANDROID_MLKIT_FACE_MODE" default="inherit" />
+        <preference name="ANDROID_MLKIT_BARCODE_MODE" default="inherit" />
+        <preference name="ANDROID_MLKIT_OCR_MODE" default="inherit" />
 
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="MlKitSuite">
@@ -37,8 +40,14 @@
 
         <config-file target="AndroidManifest.xml" parent="/manifest/application">
             <meta-data
-                android:name="com.andreszs.plugins.mlkitsuite.MODEL_DELIVERY"
-                android:value="${mlKitSuiteModelDelivery}" />
+                android:name="com.andreszs.plugins.mlkitsuite.FACE_MODE"
+                android:value="${mlKitSuiteFaceMode}" />
+            <meta-data
+                android:name="com.andreszs.plugins.mlkitsuite.BARCODE_MODE"
+                android:value="${mlKitSuiteBarcodeMode}" />
+            <meta-data
+                android:name="com.andreszs.plugins.mlkitsuite.OCR_MODE"
+                android:value="${mlKitSuiteOcrMode}" />
             <meta-data
                 android:name="${mlKitSuiteDependencyMetadataName}"
                 android:value="${mlKitSuiteDependencyMetadataValue}" />
@@ -76,6 +85,7 @@
         <source-file src="src/android/java/DocumentScanConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/DocumentScanActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/DocumentScannerModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/MlKitModelsModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/StaticImageProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
     </platform>
 

@@ -36,7 +36,7 @@ def mlKitSuiteReadCordovaAndroidMajor() {
     )
 }
 
-def mlKitSuiteReadModelDelivery() {
+def mlKitSuiteReadPluginVariable(String variableName, String fallback) {
     def stateCandidates = [
         rootProject.file('../../plugins/fetch.json'),
         rootProject.file('../plugins/fetch.json'),
@@ -52,8 +52,8 @@ def mlKitSuiteReadModelDelivery() {
             def pluginState = stateFile.name == 'fetch.json'
                 ? state['cordova-plugin-mlkit-suite']
                 : state.cordova?.plugins?.get('cordova-plugin-mlkit-suite')
-            def selected = pluginState?.variables?.ANDROID_MLKIT_MODEL_DELIVERY
-                ?: pluginState?.ANDROID_MLKIT_MODEL_DELIVERY
+            def selected = pluginState?.variables?.get(variableName)
+                ?: pluginState?.get(variableName)
             if (selected != null && !selected.toString().trim().isEmpty()) {
                 return selected.toString().trim()
             }
@@ -62,7 +62,22 @@ def mlKitSuiteReadModelDelivery() {
             // tooling. Keep looking for another persisted source here.
         }
     }
-    return 'bundled'
+    return fallback
+}
+
+def mlKitSuiteNormalizeMode(String rawValue, String variableName) {
+    def value = rawValue == null ? '' : rawValue.trim().toLowerCase()
+    if (value == 'play-services') {
+        // Backward-compatible alias used by the former aggregate variable.
+        return 'install-time'
+    }
+    if (!(value in ['bundled', 'install-time', 'first-use'])) {
+        throw new GradleException(
+            "cordova-plugin-mlkit-suite: invalid ${variableName} value '${rawValue}'. " +
+            'Use bundled, install-time or first-use.'
+        )
+    }
+    return value
 }
 
 def cameraXByCordova = [
@@ -81,12 +96,27 @@ def webKitByCordova = [
 ]
 
 def cordovaAndroidMajor = mlKitSuiteReadCordovaAndroidMajor()
-def modelDelivery = mlKitSuiteReadModelDelivery()
-if (!(modelDelivery in ['bundled', 'play-services'])) {
-    throw new GradleException(
-        "cordova-plugin-mlkit-suite: invalid Android model delivery '${modelDelivery}'. " +
-        'Use bundled or play-services.'
-    )
+def defaultMode = mlKitSuiteNormalizeMode(
+    mlKitSuiteReadPluginVariable('ANDROID_MLKIT_MODEL_DELIVERY', 'install-time'),
+    'ANDROID_MLKIT_MODEL_DELIVERY'
+)
+def readModuleMode = { String variableName ->
+    def selected = mlKitSuiteReadPluginVariable(variableName, 'inherit')
+    return selected == null || selected.trim().isEmpty() || selected.equalsIgnoreCase('inherit')
+        ? defaultMode
+        : mlKitSuiteNormalizeMode(selected, variableName)
+}
+def faceMode = readModuleMode('ANDROID_MLKIT_FACE_MODE')
+def barcodeMode = readModuleMode('ANDROID_MLKIT_BARCODE_MODE')
+def ocrMode = readModuleMode('ANDROID_MLKIT_OCR_MODE')
+def usesPlayServicesModels = [faceMode, barcodeMode, ocrMode].any { it != 'bundled' }
+def installTimeModules = []
+if (faceMode == 'install-time') installTimeModules.add('face')
+if (barcodeMode == 'install-time') installTimeModules.add('barcode')
+if (ocrMode == 'install-time') installTimeModules.add('ocr')
+
+if (usesPlayServicesModels && cordovaConfig.MIN_SDK_VERSION < 23) {
+    cordovaConfig.MIN_SDK_VERSION = 23
 }
 def cameraXVersion = project.findProperty('mlKitSuiteCameraXVersion')?.toString()
 def mlKitFaceVersion = project.findProperty('mlKitSuiteFaceDetectionVersion')?.toString()
@@ -108,25 +138,27 @@ if (mlKitFaceVersion == null || mlKitFaceVersion.trim().isEmpty()) {
 
 logger.lifecycle(
     "cordova-plugin-mlkit-suite: cordova-android ${cordovaAndroidMajor}, " +
-    "CameraX ${cameraXVersion}, model delivery ${modelDelivery}, " +
-    (modelDelivery == 'bundled'
-        ? "ML Kit Face Detection ${mlKitFaceVersion}, Text Recognition 16.0.1, Barcode Scanning 17.2.0, "
-        : 'Play services Face Detection 17.1.0, Text Recognition 19.0.1, Barcode Scanning 18.3.1, ') +
+    "CameraX ${cameraXVersion}, " +
+    "Face ${faceMode} (${faceMode == 'bundled' ? mlKitFaceVersion : '17.1.0'}), " +
+    "Barcode ${barcodeMode} (${barcodeMode == 'bundled' ? '17.2.0' : '18.3.1'}), " +
+    "OCR ${ocrMode} (${ocrMode == 'bundled' ? '16.0.1' : '19.0.1'}), " +
     'Document Scanner 16.0.0'
 )
 
 android {
     defaultConfig {
-        manifestPlaceholders.mlKitSuiteModelDelivery = modelDelivery
-        if (modelDelivery == 'play-services') {
+        manifestPlaceholders.mlKitSuiteFaceMode = faceMode
+        manifestPlaceholders.mlKitSuiteBarcodeMode = barcodeMode
+        manifestPlaceholders.mlKitSuiteOcrMode = ocrMode
+        if (!installTimeModules.isEmpty()) {
             manifestPlaceholders.mlKitSuiteDependencyMetadataName =
                 'com.google.mlkit.vision.DEPENDENCIES'
-            manifestPlaceholders.mlKitSuiteDependencyMetadataValue = 'face,barcode,ocr'
+            manifestPlaceholders.mlKitSuiteDependencyMetadataValue = installTimeModules.join(',')
         } else {
-            // Keep the manifest element inert in bundled mode. A placeholder is
-            // used because Cordova plugin.xml does not support conditional XML.
+            // Keep the manifest element inert when no module uses install-time
+            // prefetch. Cordova plugin.xml does not support conditional XML.
             manifestPlaceholders.mlKitSuiteDependencyMetadataName =
-                'com.andreszs.plugins.mlkitsuite.BUNDLED_MODE'
+                'com.andreszs.plugins.mlkitsuite.NO_INSTALL_TIME_MODELS'
             manifestPlaceholders.mlKitSuiteDependencyMetadataValue = 'true'
         }
     }
@@ -159,14 +191,20 @@ dependencies {
     }
     implementation 'androidx.exifinterface:exifinterface:1.3.2'
     implementation 'com.google.guava:listenablefuture:1.0'
-    if (modelDelivery == 'play-services') {
-        implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
-        implementation 'com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1'
-        implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
-    } else {
+    if (faceMode == 'bundled') {
         implementation "com.google.mlkit:face-detection:${mlKitFaceVersion}"
+    } else {
+        implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
+    }
+    if (barcodeMode == 'bundled') {
         implementation 'com.google.mlkit:barcode-scanning:17.2.0'
+    } else {
+        implementation 'com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1'
+    }
+    if (ocrMode == 'bundled') {
         implementation 'com.google.mlkit:text-recognition:16.0.1'
+    } else {
+        implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
     }
     implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
     compileOnly "androidx.webkit:webkit:${webKitByCordova[cordovaAndroidMajor]}"

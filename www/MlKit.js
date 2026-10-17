@@ -38,6 +38,32 @@ exports.getCapabilities = function getCapabilities() {
 };
 
 /**
+ * Ensures that selected Play services ML Kit modules are ready. Omit modules
+ * to prepare Face Detection, Barcode Scanning, and Latin OCR. Bundled modules
+ * are ignored because they are already available.
+ *
+ * @param {string|string[]} [modules] face, barcode, ocr, or an array of them.
+ * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
+ */
+exports.prepareModels = function prepareModels(modules) {
+    if (modules === undefined || modules === null) {
+        return call('prepareModels');
+    }
+    var requested = typeof modules === 'string' ? [modules] : modules;
+    var valid = Array.isArray(requested) && requested.length > 0 && requested.every(function (module) {
+        return typeof module === 'string' && ['face', 'barcode', 'ocr'].indexOf(module.trim().toLowerCase()) !== -1;
+    });
+    if (!valid) {
+        return Promise.reject({
+            code: 'INVALID_ARGUMENT',
+            message: 'modules must be face, barcode, ocr, or an array containing those names.',
+            recoverable: false
+        });
+    }
+    return call('prepareModels', [modules]);
+};
+
+/**
  * Opens the native document-scanner flow.
  *
  * @param {{pageLimit?: number, galleryImportAllowed?: boolean,

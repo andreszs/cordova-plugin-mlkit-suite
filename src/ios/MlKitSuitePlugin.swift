@@ -23,15 +23,18 @@ final class MlKitSuitePlugin: CDVPlugin {
             "platform": "ios",
             "offline": true,
             "modelDelivery": "bundled",
+            "modelDownloadStrategy": "bundled",
             "face": [
                 "capture": true,
                 "frontCamera": true,
                 "autoCapture": true,
+                "mode": "bundled",
                 "bundled": true
             ],
             "barcode": [
                 "scan": false,
                 "scanImage": true,
+                "mode": "bundled",
                 "bundled": true,
                 "formats": Self.barcodeFormatNames
             ],
@@ -41,12 +44,24 @@ final class MlKitSuitePlugin: CDVPlugin {
             ],
             "text": [
                 "recognize": true,
+                "mode": "bundled",
                 "bundled": true,
                 "scripts": ["LATIN"]
             ]
         ]
         commandDelegate.send(
             CDVPluginResult(status: CDVCommandStatus.ok, messageAs: payload),
+            callbackId: command.callbackId
+        )
+    }
+
+    @objc(prepareModels:)
+    func prepareModels(_ command: CDVInvokedUrlCommand) {
+        commandDelegate.send(
+            CDVPluginResult(
+                status: CDVCommandStatus.ok,
+                messageAs: ["status": "ready", "alreadyAvailable": true]
+            ),
             callbackId: command.callbackId
         )
     }
