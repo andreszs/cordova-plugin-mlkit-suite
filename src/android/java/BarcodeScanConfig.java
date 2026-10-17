@@ -80,7 +80,7 @@ final class BarcodeScanConfig {
         Iterator<String> keys = value.keys();
         while (keys.hasNext()) {
             String key = keys.next();
-            if (!"formats".equals(key)) {
+            if (!("formats".equals(key) || "moduleLoadingMessage".equals(key))) {
                 throw new IllegalArgumentException("Unknown barcode image option: " + key + ".");
             }
         }
@@ -134,7 +134,8 @@ final class BarcodeScanConfig {
             String key = keys.next();
             if (!("formats".equals(key)
                 || "showCloseButton".equals(key) || "showTorchButton".equals(key)
-                || "instructionText".equals(key) || "timeoutMs".equals(key))) {
+                || "instructionText".equals(key) || "timeoutMs".equals(key)
+                || "moduleLoadingMessage".equals(key))) {
                 throw new IllegalArgumentException("Unknown barcode scan option: " + key + ".");
             }
         }

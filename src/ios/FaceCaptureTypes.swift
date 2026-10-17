@@ -95,7 +95,8 @@ struct FaceCaptureOptions {
     init(dictionary: [String: Any]) throws {
         let known = Set([
             "outputWidth", "outputHeight", "jpegQuality", "showCloseButton",
-            "debugMode", "instructionText", "timeoutMs", "checks"
+            "debugMode", "instructionText", "timeoutMs", "checks",
+            "moduleLoadingMessage"
         ])
         for key in dictionary.keys where !known.contains(key) {
             throw MlKitSuiteError.invalidArgument("Unknown face capture option: \(key).")

@@ -18,7 +18,6 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
-import org.apache.cordova.CallbackContext;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -26,10 +25,15 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class MlKitModelsModuleInstaller {
+    interface Callback {
+        void onReady(JSONObject result);
+        void onError(JSONObject error);
+    }
+
     private MlKitModelsModuleInstaller() { }
 
     static void prepare(Activity activity, boolean includeFace, boolean includeBarcode,
-                        boolean includeText, CallbackContext callback) {
+                        boolean includeText, String loadingMessage, Callback callback) {
         final FaceDetector face = includeFace
             ? FaceDetection.getClient(new FaceDetectorOptions.Builder().build()) : null;
         final BarcodeScanner barcode = includeBarcode ? BarcodeScanning.getClient() : null;
@@ -46,14 +50,18 @@ final class MlKitModelsModuleInstaller {
             .addOnSuccessListener(response -> {
                 if (response.areModulesAvailable()) {
                     close(face, barcode, text);
-                    callback.success(readyResult(true));
+                    callback.onReady(readyResult(true));
                 } else {
-                    install(client, modules, face, barcode, text, callback);
+                    MlKitLoadingDialog loadingDialog = new MlKitLoadingDialog(
+                        activity, loadingMessage
+                    );
+                    loadingDialog.show();
+                    install(client, modules, face, barcode, text, loadingDialog, callback);
                 }
             })
             .addOnFailureListener(error -> {
                 close(face, barcode, text);
-                callback.error(MlKitSuitePlugin.error(
+                callback.onError(MlKitSuitePlugin.error(
                     "MODULE_DOWNLOAD_FAILED",
                     "Unable to check the ML Kit model modules.",
                     true
@@ -63,20 +71,22 @@ final class MlKitModelsModuleInstaller {
 
     private static void install(ModuleInstallClient client, OptionalModuleApi[] modules,
                                 FaceDetector face, BarcodeScanner barcode, TextRecognizer text,
-                                CallbackContext callback) {
+                                MlKitLoadingDialog loadingDialog, Callback callback) {
         AtomicBoolean finished = new AtomicBoolean(false);
         InstallStatusListener[] listenerHolder = new InstallStatusListener[1];
         listenerHolder[0] = update -> {
             int state = update.getInstallState();
             if (state == ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED) {
                 finishSuccess(client, listenerHolder[0], face, barcode, text,
-                    callback, finished, false);
+                    loadingDialog, callback, finished, false);
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_CANCELED) {
-                finishError(client, listenerHolder[0], face, barcode, text, callback, finished,
+                finishError(client, listenerHolder[0], face, barcode, text, loadingDialog,
+                    callback, finished,
                     "MODULE_DOWNLOAD_CANCELLED", "ML Kit model download was cancelled.");
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_FAILED) {
                 String status = ModuleInstallStatusCodes.getStatusCodeString(update.getErrorCode());
-                finishError(client, listenerHolder[0], face, barcode, text, callback, finished,
+                finishError(client, listenerHolder[0], face, barcode, text, loadingDialog,
+                    callback, finished,
                     "MODULE_DOWNLOAD_FAILED",
                     "Unable to download the ML Kit model modules (" + status + ").");
             }
@@ -89,33 +99,37 @@ final class MlKitModelsModuleInstaller {
             .addOnSuccessListener(response -> {
                 if (response.areModulesAlreadyInstalled()) {
                     finishSuccess(client, listenerHolder[0], face, barcode, text,
-                        callback, finished, true);
+                        loadingDialog, callback, finished, true);
                 }
             })
             .addOnFailureListener(error -> finishError(
-                client, listenerHolder[0], face, barcode, text, callback, finished,
+                client, listenerHolder[0], face, barcode, text, loadingDialog, callback, finished,
                 "MODULE_DOWNLOAD_FAILED", "Unable to start the ML Kit model download."
             ));
     }
 
     private static void finishSuccess(ModuleInstallClient client, InstallStatusListener listener,
                                       FaceDetector face, BarcodeScanner barcode,
-                                      TextRecognizer text, CallbackContext callback,
+                                      TextRecognizer text, MlKitLoadingDialog loadingDialog,
+                                      Callback callback,
                                       AtomicBoolean finished, boolean alreadyAvailable) {
         if (!finished.compareAndSet(false, true)) return;
         client.unregisterListener(listener);
+        loadingDialog.dismiss();
         close(face, barcode, text);
-        callback.success(readyResult(alreadyAvailable));
+        callback.onReady(readyResult(alreadyAvailable));
     }
 
     private static void finishError(ModuleInstallClient client, InstallStatusListener listener,
                                     FaceDetector face, BarcodeScanner barcode,
-                                    TextRecognizer text, CallbackContext callback,
+                                    TextRecognizer text, MlKitLoadingDialog loadingDialog,
+                                    Callback callback,
                                     AtomicBoolean finished, String code, String message) {
         if (!finished.compareAndSet(false, true)) return;
         client.unregisterListener(listener);
+        loadingDialog.dismiss();
         close(face, barcode, text);
-        callback.error(MlKitSuitePlugin.error(code, message, true));
+        callback.onError(MlKitSuitePlugin.error(code, message, true));
     }
 
     private static void close(FaceDetector face, BarcodeScanner barcode, TextRecognizer text) {

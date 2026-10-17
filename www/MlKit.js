@@ -33,6 +33,24 @@ function call(action, args) {
     });
 }
 
+function moduleLoadingMessageError(options) {
+    if (!options || !Object.prototype.hasOwnProperty.call(options, 'moduleLoadingMessage')) {
+        return null;
+    }
+    var value = options.moduleLoadingMessage;
+    if (value === null || typeof value === 'string') return null;
+    return {
+        code: 'INVALID_ARGUMENT',
+        message: 'moduleLoadingMessage must be a string or null.',
+        recoverable: false
+    };
+}
+
+function rejectInvalidModuleLoadingMessage(options) {
+    var error = moduleLoadingMessageError(options);
+    return error ? Promise.reject(error) : null;
+}
+
 exports.getCapabilities = function getCapabilities() {
     return call('getCapabilities');
 };
@@ -42,12 +60,21 @@ exports.getCapabilities = function getCapabilities() {
  * to prepare Face Detection, Barcode Scanning, and Latin OCR. Bundled modules
  * are ignored because they are already available.
  *
- * @param {string|string[]} [modules] face, barcode, ocr, or an array of them.
+ * @param {string|string[]|object} [modules] face, barcode, ocr, an array, or
+ *        the options object when preparing every module.
+ * @param {{moduleLoadingMessage?: string|null}} [options] Native loading text.
  * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
  */
-exports.prepareModels = function prepareModels(modules) {
+exports.prepareModels = function prepareModels(modules, options) {
+    if (modules && typeof modules === 'object' && !Array.isArray(modules)
+        && options === undefined) {
+        options = modules;
+        modules = undefined;
+    }
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
     if (modules === undefined || modules === null) {
-        return call('prepareModels');
+        return options ? call('prepareModels', [null, options]) : call('prepareModels');
     }
     var requested = typeof modules === 'string' ? [modules] : modules;
     var valid = Array.isArray(requested) && requested.length > 0 && requested.every(function (module) {
@@ -60,37 +87,44 @@ exports.prepareModels = function prepareModels(modules) {
             recoverable: false
         });
     }
-    return call('prepareModels', [modules]);
+    return options ? call('prepareModels', [modules, options]) : call('prepareModels', [modules]);
 };
 
 /**
  * Opens the native document-scanner flow.
  *
  * @param {{pageLimit?: number, galleryImportAllowed?: boolean,
- *          resultFormats?: string[]|string, scannerMode?: string}} options
+ *          resultFormats?: string[]|string, scannerMode?: string,
+ *          moduleLoadingMessage?: string|null}} options
  * @returns {Promise<object>} Scanned JPEG pages/PDF or a cancellation result.
  */
 exports.scanDocument = function scanDocument(options) {
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
     return call('documentScan', [options || {}]);
 };
 
 /**
  * Ensures that the Google Play services Document Scanner component is ready.
- * Applications can show progress UI while this Promise is pending.
+ * Shows the native loading indicator only when the component must download.
  *
+ * @param {{moduleLoadingMessage?: string|null}} [options] Native loading text.
  * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
  */
-exports.prepareDocumentScanner = function prepareDocumentScanner() {
-    return call('prepareDocumentScanner');
+exports.prepareDocumentScanner = function prepareDocumentScanner(options) {
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
+    return options ? call('prepareDocumentScanner', [options]) : call('prepareDocumentScanner');
 };
 
 /**
  * Recognizes Latin-script text in an existing local image.
  *
  * @param {string} imagePath Native path, file/content URI, or plugin image URI.
+ * @param {{moduleLoadingMessage?: string|null}} [options] Native loading text.
  * @returns {Promise<string>} Plain recognized text; empty when none is found.
  */
-exports.recognizeText = function recognizeText(imagePath) {
+exports.recognizeText = function recognizeText(imagePath, options) {
     if (typeof imagePath !== 'string' || !imagePath.trim()) {
         return Promise.reject({
             code: 'INVALID_ARGUMENT',
@@ -98,14 +132,17 @@ exports.recognizeText = function recognizeText(imagePath) {
             recoverable: false
         });
     }
-    return call('recognizeText', [imagePath]);
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
+    return options ? call('recognizeText', [imagePath, options]) : call('recognizeText', [imagePath]);
 };
 
 /**
  * Detects every supported barcode in an existing local image.
  *
  * @param {string} imagePath Native path, file/content URI, or plugin image URI.
- * @param {{formats?: string[]|string}} options Optional format filter.
+ * @param {{formats?: string[]|string,
+ *          moduleLoadingMessage?: string|null}} options Optional settings.
  * @returns {Promise<object[]>} All detected barcodes; empty when none are found.
  */
 exports.scanBarcodes = function scanBarcodes(imagePath, options) {
@@ -116,6 +153,8 @@ exports.scanBarcodes = function scanBarcodes(imagePath, options) {
             recoverable: false
         });
     }
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
     return call('scanBarcodes', [imagePath, options || {}]);
 };
 
@@ -126,6 +165,7 @@ exports.face = {
      * @param {{outputWidth?: number, outputHeight?: number, jpegQuality?: number,
      *          showCloseButton?: boolean, debugMode?: boolean,
      *          instructionText?: string, timeoutMs?: number,
+     *          moduleLoadingMessage?: string|null,
      *          checks?: {singleFace?: boolean, faceSize?: boolean,
      *          centering?: boolean, pose?: boolean, eyesOpen?: boolean,
      *          neutralExpression?: boolean, stability?: boolean,
@@ -133,6 +173,8 @@ exports.face = {
      * @returns {Promise<object>} A success result or {status: 'cancelled', reason: 'user'}.
      */
     capture: function capture(options) {
+        var loadingError = rejectInvalidModuleLoadingMessage(options);
+        if (loadingError) return loadingError;
         return call('faceCapture', [options || {}]);
     }
 };
@@ -144,10 +186,13 @@ exports.barcode = {
      *
      * @param {{formats?: string[]|string, showCloseButton?: boolean,
      *          showTorchButton?: boolean,
-     *          instructionText?: string, timeoutMs?: number}} options
+     *          instructionText?: string, timeoutMs?: number,
+     *          moduleLoadingMessage?: string|null}} options
      * @returns {Promise<object>} A success result or {status: 'cancelled', reason: 'user'}.
      */
     scan: function scan(options) {
+        var loadingError = rejectInvalidModuleLoadingMessage(options);
+        if (loadingError) return loadingError;
         return call('barcodeScan', [options || {}]);
     }
 };

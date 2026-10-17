@@ -12,15 +12,19 @@ import com.google.mlkit.vision.documentscanner.GmsDocumentScanner;
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions;
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning;
 
-import org.apache.cordova.CallbackContext;
 import org.json.JSONObject;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class DocumentScannerModuleInstaller {
+    interface Callback {
+        void onReady(JSONObject result);
+        void onError(JSONObject error);
+    }
+
     private DocumentScannerModuleInstaller() { }
 
-    static void prepare(Activity activity, CallbackContext callback) {
+    static void prepare(Activity activity, String loadingMessage, Callback callback) {
         GmsDocumentScanner scanner = GmsDocumentScanning.getClient(
             new GmsDocumentScannerOptions.Builder().build()
         );
@@ -28,12 +32,16 @@ final class DocumentScannerModuleInstaller {
         client.areModulesAvailable(scanner)
             .addOnSuccessListener(response -> {
                 if (response.areModulesAvailable()) {
-                    callback.success(readyResult(true));
+                    callback.onReady(readyResult(true));
                 } else {
-                    install(client, scanner, callback);
+                    MlKitLoadingDialog loadingDialog = new MlKitLoadingDialog(
+                        activity, loadingMessage
+                    );
+                    loadingDialog.show();
+                    install(client, scanner, loadingDialog, callback);
                 }
             })
-            .addOnFailureListener(error -> callback.error(MlKitSuitePlugin.error(
+            .addOnFailureListener(error -> callback.onError(MlKitSuitePlugin.error(
                 "SCANNER_UNAVAILABLE",
                 "Unable to check the Document Scanner component.",
                 true
@@ -41,16 +49,16 @@ final class DocumentScannerModuleInstaller {
     }
 
     private static void install(ModuleInstallClient client, GmsDocumentScanner scanner,
-                                CallbackContext callback) {
+                                MlKitLoadingDialog loadingDialog, Callback callback) {
         AtomicBoolean finished = new AtomicBoolean(false);
         InstallStatusListener[] listenerHolder = new InstallStatusListener[1];
         listenerHolder[0] = update -> {
             int state = update.getInstallState();
             if (state == ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED) {
-                finishSuccess(client, listenerHolder[0], callback, finished, false);
+                finishSuccess(client, listenerHolder[0], loadingDialog, callback, finished, false);
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_CANCELED) {
                 finishError(
-                    client, listenerHolder[0], callback, finished,
+                    client, listenerHolder[0], loadingDialog, callback, finished,
                     "MODULE_DOWNLOAD_CANCELLED",
                     "Document Scanner component download was cancelled.",
                     true
@@ -58,7 +66,7 @@ final class DocumentScannerModuleInstaller {
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_FAILED) {
                 String status = ModuleInstallStatusCodes.getStatusCodeString(update.getErrorCode());
                 finishError(
-                    client, listenerHolder[0], callback, finished,
+                    client, listenerHolder[0], loadingDialog, callback, finished,
                     "MODULE_DOWNLOAD_FAILED",
                     "Unable to download the Document Scanner component (" + status + ").",
                     true
@@ -73,11 +81,11 @@ final class DocumentScannerModuleInstaller {
         client.installModules(request)
             .addOnSuccessListener(response -> {
                 if (response.areModulesAlreadyInstalled()) {
-                    finishSuccess(client, listenerHolder[0], callback, finished, true);
+                    finishSuccess(client, listenerHolder[0], loadingDialog, callback, finished, true);
                 }
             })
             .addOnFailureListener(error -> finishError(
-                client, listenerHolder[0], callback, finished,
+                client, listenerHolder[0], loadingDialog, callback, finished,
                 "MODULE_DOWNLOAD_FAILED",
                 "Unable to start the Document Scanner component download.",
                 true
@@ -85,19 +93,23 @@ final class DocumentScannerModuleInstaller {
     }
 
     private static void finishSuccess(ModuleInstallClient client, InstallStatusListener listener,
-                                      CallbackContext callback, AtomicBoolean finished,
+                                      MlKitLoadingDialog loadingDialog, Callback callback,
+                                      AtomicBoolean finished,
                                       boolean alreadyAvailable) {
         if (!finished.compareAndSet(false, true)) return;
         client.unregisterListener(listener);
-        callback.success(readyResult(alreadyAvailable));
+        loadingDialog.dismiss();
+        callback.onReady(readyResult(alreadyAvailable));
     }
 
     private static void finishError(ModuleInstallClient client, InstallStatusListener listener,
-                                    CallbackContext callback, AtomicBoolean finished,
+                                    MlKitLoadingDialog loadingDialog, Callback callback,
+                                    AtomicBoolean finished,
                                     String code, String message, boolean recoverable) {
         if (!finished.compareAndSet(false, true)) return;
         client.unregisterListener(listener);
-        callback.error(MlKitSuitePlugin.error(code, message, recoverable));
+        loadingDialog.dismiss();
+        callback.onError(MlKitSuitePlugin.error(code, message, recoverable));
     }
 
     private static JSONObject readyResult(boolean alreadyAvailable) {

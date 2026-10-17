@@ -290,7 +290,7 @@ final class MlKitSuitePlugin: CDVPlugin {
     ]
 
     private static func barcodeFormats(_ dictionary: [String: Any]) throws -> BarcodeFormat {
-        for key in dictionary.keys where key != "formats" {
+        for key in dictionary.keys where key != "formats" && key != "moduleLoadingMessage" {
             throw MlKitSuiteError.invalidArgument("Unknown barcode image option: \(key).")
         }
         guard let raw = dictionary["formats"], !(raw is NSNull) else { return .all }

@@ -15,6 +15,7 @@ Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.
   - [iOS setup](#ios-setup)
 - [Android model delivery](#android-model-delivery)
   - [Play services download timing](#play-services-download-timing)
+  - [Native module-loading indicator](#native-module-loading-indicator)
 - [API overview](#api-overview)
 - [Capabilities](#capabilities)
 - [Document scanning](#document-scanning)
@@ -149,19 +150,31 @@ The plugin selects the matching dependency separately for each module. It also g
 
 `install-time` asks Google Play services to fetch the selected module after installation from Google Play. It is best effort, is not specifically triggered by opening the app, and may still be incomplete at first use. A sideloaded APK must not depend on this prefetch. `first-use` omits the request and lets the first ML Kit API call initiate the download.
 
-For predictable UI, call `MlKit.prepareModels()` while showing a spinner before enabling dependent actions. With no argument it prepares every non-bundled module; pass one name or an array to prepare only what the next screen needs. Bundled modules are already ready and are skipped:
+### Native module-loading indicator
+
+Every Android ML operation that depends on Google Play services automatically checks its required module. If it is missing, the plugin shows a non-cancelable native spinner, downloads it, closes the spinner, and then continues the original operation. No indicator is shown for bundled or already available modules.
+
+The default text is `Loading Google Play services module...`. Pass `moduleLoadingMessage` in the operation options to provide arbitrary localized text; pass an empty string to show only the spinner. `null` or an omitted option uses the default:
 
 ```javascript
-showProgress("Preparing ML Kit…");
-try {
-    await MlKit.prepareModels(["barcode", "ocr"]);
-    enableMlKitActions();
-} finally {
-    hideProgress();
-}
+await MlKit.recognizeText(imagePath, {
+    moduleLoadingMessage: "Descargando reconocimiento de texto…"
+});
+
+await MlKit.barcode.scan({
+    moduleLoadingMessage: "" // Spinner without a label.
+});
 ```
 
-This startup call belongs in the **host application's JavaScript**; no plugin file is edited. Without it, camera flows keep analyzing subsequent frames while a missing module downloads and can eventually time out, while a still-image request rejects so the app can show an error and retry. It never intentionally fails silently.
+This option is available in `face.capture()`, `barcode.scan()`, `recognizeText()`, `scanBarcodes()`, `scanDocument()`, `prepareModels()`, and `prepareDocumentScanner()`. The application supplies the localized string at runtime; no plugin or Android resource file is edited.
+
+`MlKit.prepareModels(modules?, options?)` remains useful for proactive downloads before entering a feature. With no module argument it prepares every non-bundled module; pass one name or an array to prepare only what the next screen needs:
+
+```javascript
+await MlKit.prepareModels(["barcode", "ocr"], {
+    moduleLoadingMessage: "Preparando funciones de cámara…"
+});
+```
 
 `MlKit.getCapabilities()` reports each affected module's exact `mode` and `bundled` flag. At the root, `modelDelivery` groups `install-time` and `first-use` as `play-services` and reports `mixed` only when bundled and unbundled modules coexist; `modelDownloadStrategy` reports `mixed` whenever the exact modes differ.
 
@@ -172,10 +185,10 @@ Document Scanner is separate from this choice: it is always delivered dynamicall
 | Method | Android | iOS | Purpose |
 | --- | --- | --- | --- |
 | `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
-| `MlKit.prepareModels(modules?)` | yes; API 23+ for Play services | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
-| `MlKit.prepareDocumentScanner()` | API 23+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
+| `MlKit.prepareModels(modules?, options?)` | yes; API 23+ for Play services | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
+| `MlKit.prepareDocumentScanner(options?)` | API 23+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
 | `MlKit.scanDocument(options)` | API 23+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
-| `MlKit.recognizeText(imagePath)` | yes | yes | Returns plain Latin-script text from a local image. |
+| `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
 | `MlKit.scanBarcodes(imagePath, options)` | yes | yes | Returns every matching barcode detected in a local image. |
 | `MlKit.barcode.scan(options)` | yes | no | Opens a high-resolution rear-camera barcode scanner. |
 | `MlKit.face.capture(options)` | yes | yes | Opens guided front-camera face capture with automatic capture. |
@@ -200,25 +213,21 @@ The result describes `face`, `barcode`, `document`, and `text`. On Android, each
 
 `MlKit.scanDocument(options)` opens the Google ML Kit Document Scanner on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
 
-The scanner UI, logic, and models are an on-demand Google Play services component. Call `prepareDocumentScanner()` before opening the scanner when the application wants to show its own progress UI during a possible first-use download. It resolves immediately when the component is already available and otherwise resolves only after installation completes:
+The scanner UI, logic, and models are an on-demand Google Play services component. `scanDocument()` now prepares that component automatically and shows the native loading indicator only when a download is required. Call `prepareDocumentScanner()` earlier only when proactive preparation better suits the application flow:
 
 ```javascript
-showProgress("Preparing scanner… First use may take a moment.");
-try {
-    await MlKit.prepareDocumentScanner();
-} finally {
-    hideProgress();
-}
+await MlKit.prepareDocumentScanner({
+    moduleLoadingMessage: "Preparando el escáner…"
+});
 ```
-
-Applications may use any progress UI. The plugin does not impose a spinner dependency.
 
 ```javascript
 const result = await MlKit.scanDocument({
     pageLimit: 4,
     galleryImportAllowed: true,
     resultFormats: ["JPEG", "PDF"],
-    scannerMode: "FULL"
+    scannerMode: "FULL",
+    moduleLoadingMessage: "Preparando el escáner…"
 });
 
 if (result.status === "success") {
@@ -237,6 +246,7 @@ The method performs device checks before requesting the Google scanner. Android 
 | `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
 | `resultFormats` | `string[] \| string` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `JPG` aliases `JPEG`. |
 | `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL"` | `"FULL"` | Selects the native editing feature set. `BASE` still includes crop, rotation, page removal, and page reordering. |
+| `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading the scanner component. Empty string shows only the spinner. |
 
 > [!IMPORTANT]
 > Google does not provide an option to disable crop and rotation in its Document Scanner UI. Even `BASE`, the least permissive mode, retains basic editing because the native flow is designed to leave the user in control of the pages returned to the application. Applications that require an immutable front/back capture must use a dedicated camera flow instead of `MlKit.scanDocument()`.
@@ -272,10 +282,12 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
 
 ## Text recognition
 
-`MlKit.recognizeText(imagePath)` runs the Latin text recognizer selected by the Android delivery mode against a local image and resolves to one plain string. iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
+`MlKit.recognizeText(imagePath, options?)` runs the Latin text recognizer selected by the Android delivery mode against a local image and resolves to one plain string. iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
 
 ```javascript
-const text = await MlKit.recognizeText(result.pages[0].imagePath);
+const text = await MlKit.recognizeText(result.pages[0].imagePath, {
+    moduleLoadingMessage: "Cargando reconocimiento de texto…"
+});
 console.log(text);
 ```
 
@@ -287,7 +299,8 @@ console.log(text);
 
 ```javascript
 const barcodes = await MlKit.scanBarcodes(imagePath, {
-    formats: ["PDF_417", "QR_CODE"]
+    formats: ["PDF_417", "QR_CODE"],
+    moduleLoadingMessage: "Cargando detector de códigos…"
 });
 
 for (const barcode of barcodes) {
@@ -295,7 +308,7 @@ for (const barcode of barcodes) {
 }
 ```
 
-Omit `formats` to enable every supported format. Each detected value includes `text`, `format`, numeric `valueType`, `boundingBox`, and `cornerPoints`. An image containing no matching barcode resolves to `[]`.
+Omit `formats` to enable every supported format. `moduleLoadingMessage` follows the common native-indicator rules above. Each detected value includes `text`, `format`, numeric `valueType`, `boundingBox`, and `cornerPoints`. An image containing no matching barcode resolves to `[]`.
 
 ## Camera barcode scanning
 
@@ -307,6 +320,7 @@ const result = await MlKit.barcode.scan({
     showCloseButton: true,
     showTorchButton: true,
     instructionText: "Place a barcode inside the frame",
+    moduleLoadingMessage: "Cargando detector de códigos…",
     timeoutMs: 45000
 });
 
@@ -345,6 +359,7 @@ Both barcode methods support all 13 formats exposed by ML Kit Barcode Scanning:
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. Android Back still cancels when hidden. |
 | `showTorchButton` | `boolean` | `true` | Shows a torch toggle when the rear camera has flash hardware. |
 | `instructionText` | `string \| null` | `"Place a barcode inside the frame"` | Text shown above the guide. An empty string hides it. |
+| `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading Barcode Scanning. Empty string shows only the spinner. |
 | `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
 ## Face capture
@@ -359,6 +374,7 @@ const result = await MlKit.face.capture({
     showCloseButton: true,
     debugMode: false,
     instructionText: "Place your face inside the oval",
+    moduleLoadingMessage: "Cargando detector facial…",
     checks: {
         singleFace: true,
         faceSize: true,
@@ -386,6 +402,7 @@ Capture starts automatically only after all enabled checks remain acceptable for
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. |
 | `debugMode` | `boolean` | `false` | Shows face bounds and live quality values without weakening validation. |
 | `instructionText` | `string \| null` | `"Place your face inside the oval"` | Text shown above the guide. An empty string hides it. |
+| `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading Face Detection. Empty string shows only the spinner. |
 | `checks` | `object \| null` | all enabled | Enables or disables individual capture gates. |
 | `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
@@ -533,8 +550,9 @@ Before release, validate installation and a debug build with each supported Cord
 
 - Added per-module Android delivery variables for Face, Barcode, and OCR, with `bundled`, `install-time`, and `first-use` modes.
 - Kept `ANDROID_MLKIT_MODEL_DELIVERY` as the global shortcut and made `install-time` the default for every module; legacy `play-services` maps to `install-time`.
-- Added `MlKit.prepareModels(modules?)` to explicitly wait for all or selected non-bundled modules before enabling dependent UI.
-- Added `MlKit.prepareDocumentScanner()` so applications can display progress while Google Play services installs the on-demand scanner component.
+- Added automatic native loading indicators for missing Google Play services modules, with an optional localizable `moduleLoadingMessage` on every affected operation.
+- Added `MlKit.prepareModels(modules?, options?)` to explicitly wait for all or selected non-bundled modules before enabling dependent UI.
+- Added `MlKit.prepareDocumentScanner(options?)` to prepare the on-demand scanner component proactively.
 - Added Android `MlKit.scanDocument(options)` using the dynamically delivered ML Kit Document Scanner `16.0.0`.
 - Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 23, devices below 1.7 GB total RAM, and native unsupported responses.
 - Added `MlKit.recognizeText(imagePath)` on Android and iOS with bundled Latin text recognition.

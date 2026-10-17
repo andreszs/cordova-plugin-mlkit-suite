@@ -27,24 +27,45 @@ var MlKit = require('../www/MlKit');
 Promise.resolve()
     .then(function () { return MlKit.getCapabilities(); })
     .then(function () { return MlKit.prepareModels(); })
-    .then(function () { return MlKit.prepareModels(['barcode', 'ocr']); })
-    .then(function () { return MlKit.face.capture({ timeoutMs: 1000 }); })
+    .then(function () {
+        return MlKit.prepareModels(['barcode', 'ocr'], {
+            moduleLoadingMessage: 'Cargando módulos…'
+        });
+    })
+    .then(function () {
+        return MlKit.face.capture({ timeoutMs: 1000, moduleLoadingMessage: '' });
+    })
     .then(function () {
         return MlKit.barcode.scan({ formats: ['PDF_417', 'QR_CODE'] });
     })
     .then(function () {
-        return MlKit.prepareDocumentScanner();
+        return MlKit.prepareDocumentScanner({ moduleLoadingMessage: 'Preparing scanner…' });
     })
     .then(function () {
-        return MlKit.scanDocument({ pageLimit: 2, resultFormats: ['JPEG', 'PDF'] });
+        return MlKit.scanDocument({
+            pageLimit: 2,
+            resultFormats: ['JPEG', 'PDF'],
+            moduleLoadingMessage: 'Preparing scanner…'
+        });
     })
-    .then(function () { return MlKit.recognizeText('/cache/page-1.jpg'); })
+    .then(function () {
+        return MlKit.recognizeText('/cache/page-1.jpg', {
+            moduleLoadingMessage: 'Cargando OCR…'
+        });
+    })
     .then(function () {
         return MlKit.scanBarcodes('/cache/page-2.jpg', { formats: ['PDF_417'] });
     })
     .then(function () {
         return MlKit.prepareModels([]).then(function () {
             throw new Error('Expected an empty modules array to reject.');
+        }, function (error) {
+            assert.strictEqual(error.code, 'INVALID_ARGUMENT');
+        });
+    })
+    .then(function () {
+        return MlKit.prepareModels({ moduleLoadingMessage: 42 }).then(function () {
+            throw new Error('Expected a non-string module loading message to reject.');
         }, function (error) {
             assert.strictEqual(error.code, 'INVALID_ARGUMENT');
         });
@@ -79,12 +100,24 @@ Promise.resolve()
         assert.deepStrictEqual(calls, [
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [] },
-            { service: 'MlKitSuite', action: 'prepareModels', args: [['barcode', 'ocr']] },
-            { service: 'MlKitSuite', action: 'faceCapture', args: [{ timeoutMs: 1000 }] },
+            { service: 'MlKitSuite', action: 'prepareModels', args: [
+                ['barcode', 'ocr'], { moduleLoadingMessage: 'Cargando módulos…' }
+            ] },
+            { service: 'MlKitSuite', action: 'faceCapture', args: [{
+                timeoutMs: 1000, moduleLoadingMessage: ''
+            }] },
             { service: 'MlKitSuite', action: 'barcodeScan', args: [{ formats: ['PDF_417', 'QR_CODE'] }] },
-            { service: 'MlKitSuite', action: 'prepareDocumentScanner', args: [] },
-            { service: 'MlKitSuite', action: 'documentScan', args: [{ pageLimit: 2, resultFormats: ['JPEG', 'PDF'] }] },
-            { service: 'MlKitSuite', action: 'recognizeText', args: ['/cache/page-1.jpg'] },
+            { service: 'MlKitSuite', action: 'prepareDocumentScanner', args: [{
+                moduleLoadingMessage: 'Preparing scanner…'
+            }] },
+            { service: 'MlKitSuite', action: 'documentScan', args: [{
+                pageLimit: 2,
+                resultFormats: ['JPEG', 'PDF'],
+                moduleLoadingMessage: 'Preparing scanner…'
+            }] },
+            { service: 'MlKitSuite', action: 'recognizeText', args: [
+                '/cache/page-1.jpg', { moduleLoadingMessage: 'Cargando OCR…' }
+            ] },
             { service: 'MlKitSuite', action: 'scanBarcodes', args: ['/cache/page-2.jpg', { formats: ['PDF_417'] }] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] }

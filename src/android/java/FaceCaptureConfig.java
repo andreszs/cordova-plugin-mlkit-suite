@@ -66,7 +66,8 @@ final class FaceCaptureConfig {
             if (!("outputWidth".equals(key) || "outputHeight".equals(key)
                 || "jpegQuality".equals(key) || "showCloseButton".equals(key)
                 || "debugMode".equals(key) || "instructionText".equals(key)
-                || "timeoutMs".equals(key) || "checks".equals(key))) {
+                || "timeoutMs".equals(key) || "checks".equals(key)
+                || "moduleLoadingMessage".equals(key))) {
                 throw new IllegalArgumentException("Unknown face capture option: " + key + ".");
             }
         }

@@ -30,6 +30,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     private static final int BARCODE_SCAN_REQUEST = 8613;
     private static final int DOCUMENT_SCAN_REQUEST = 8614;
     private static final long DOCUMENT_SCANNER_MINIMUM_MEMORY_BYTES = 1_700_000_000L;
+    private static final String DEFAULT_MODULE_LOADING_MESSAGE =
+        "Loading Google Play services module...";
     private static final String FACE_MODE_METADATA =
         "com.andreszs.plugins.mlkitsuite.FACE_MODE";
     private static final String BARCODE_MODE_METADATA =
@@ -60,7 +62,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return true;
         }
         if ("prepareDocumentScanner".equals(action)) {
-            prepareDocumentScanner(callbackContext);
+            prepareDocumentScanner(args, callbackContext);
             return true;
         }
         if (!("faceCapture".equals(action) || "barcodeScan".equals(action)
@@ -74,6 +76,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
 
         JSONObject options = args.optJSONObject(0);
         if (options == null) options = new JSONObject();
+        final String loadingMessage;
         try {
             if ("faceCapture".equals(action)) {
                 FaceCaptureConfig.fromJson(options);
@@ -82,6 +85,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             } else {
                 DocumentScanConfig.fromJson(options);
             }
+            loadingMessage = moduleLoadingMessage(options);
         } catch (IllegalArgumentException exception) {
             callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
             return true;
@@ -99,11 +103,11 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 );
                 return true;
             }
-            launchPendingActivity();
+            preparePendingDocumentScanner(loadingMessage, callbackContext);
             return true;
         }
         if (cordova.hasPermission(Manifest.permission.CAMERA)) {
-            launchPendingActivity();
+            preparePendingCameraModule(loadingMessage, callbackContext);
         } else {
             cordova.requestPermission(this, CAMERA_PERMISSION_REQUEST, Manifest.permission.CAMERA);
         }
@@ -142,7 +146,13 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     public void onRequestPermissionResult(int requestCode, String[] permissions, int[] results) {
         if (requestCode != CAMERA_PERMISSION_REQUEST || pendingCallback == null) return;
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-            launchPendingActivity();
+            try {
+                preparePendingCameraModule(
+                    moduleLoadingMessage(pendingOptions), pendingCallback
+                );
+            } catch (IllegalArgumentException exception) {
+                finishWithError("INVALID_ARGUMENT", exception.getMessage(), false);
+            }
         } else {
             finishWithError("CAMERA_PERMISSION_DENIED", "Camera permission was denied.", true);
         }
@@ -325,13 +335,21 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             callbackContext.error(error("INVALID_ARGUMENT", "imagePath must be a non-empty string.", false));
             return;
         }
-        File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
-        cordova.getThreadPool().execute(() -> StaticImageProcessor.recognizeText(
-            cordova.getActivity().getApplicationContext(), imagePath, cache, callbackContext
-        ));
+        try {
+            JSONObject options = optionsAt(args, 1, "options");
+            String loadingMessage = moduleLoadingMessage(options);
+            ensureModelsAvailable(false, false, true, loadingMessage, callbackContext, () -> {
+                File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
+                cordova.getThreadPool().execute(() -> StaticImageProcessor.recognizeText(
+                    cordova.getActivity().getApplicationContext(), imagePath, cache, callbackContext
+                ));
+            });
+        } catch (IllegalArgumentException exception) {
+            callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
+        }
     }
 
-    private void prepareDocumentScanner(CallbackContext callbackContext) {
+    private void prepareDocumentScanner(JSONArray args, CallbackContext callbackContext) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !documentScannerDeviceSupported()) {
             callbackContext.error(error(
                 "UNSUPPORTED_DEVICE",
@@ -340,15 +358,32 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             ));
             return;
         }
-        cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
-            cordova.getActivity(), callbackContext
-        ));
+        try {
+            String loadingMessage = moduleLoadingMessage(optionsAt(args, 0, "options"));
+            cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
+                cordova.getActivity(), loadingMessage, new DocumentScannerModuleInstaller.Callback() {
+                    @Override
+                    public void onReady(JSONObject result) {
+                        callbackContext.success(result);
+                    }
+
+                    @Override
+                    public void onError(JSONObject errorValue) {
+                        callbackContext.error(errorValue);
+                    }
+                }
+            ));
+        } catch (IllegalArgumentException exception) {
+            callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
+        }
     }
 
     private void prepareModels(JSONArray args, CallbackContext callbackContext) {
         final Set<String> requestedModules;
+        final String loadingMessage;
         try {
             requestedModules = requestedModules(args);
+            loadingMessage = moduleLoadingMessage(optionsAt(args, 1, "options"));
         } catch (IllegalArgumentException exception) {
             callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
             return;
@@ -370,7 +405,18 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return;
         }
         cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
-            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, callbackContext
+            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, loadingMessage,
+            new MlKitModelsModuleInstaller.Callback() {
+                @Override
+                public void onReady(JSONObject result) {
+                    callbackContext.success(result);
+                }
+
+                @Override
+                public void onError(JSONObject errorValue) {
+                    callbackContext.error(errorValue);
+                }
+            }
         ));
     }
 
@@ -425,14 +471,104 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return;
         }
         try {
-            int[] formats = BarcodeScanConfig.imageFormatValuesFromJson(args.optJSONObject(1));
-            File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
-            cordova.getThreadPool().execute(() -> StaticImageProcessor.scanBarcodes(
-                cordova.getActivity().getApplicationContext(), imagePath, cache, formats, callbackContext
-            ));
+            JSONObject options = optionsAt(args, 1, "options");
+            int[] formats = BarcodeScanConfig.imageFormatValuesFromJson(options);
+            String loadingMessage = moduleLoadingMessage(options);
+            ensureModelsAvailable(false, true, false, loadingMessage, callbackContext, () -> {
+                File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
+                cordova.getThreadPool().execute(() -> StaticImageProcessor.scanBarcodes(
+                    cordova.getActivity().getApplicationContext(), imagePath, cache, formats,
+                    callbackContext
+                ));
+            });
         } catch (IllegalArgumentException exception) {
             callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
         }
+    }
+
+    private void preparePendingCameraModule(String loadingMessage, CallbackContext owner) {
+        boolean face = "faceCapture".equals(pendingAction);
+        ensureModelsAvailable(face, !face, false, loadingMessage, owner, () -> {
+            if (pendingCallback != owner) return;
+            launchPendingActivity();
+        }, () -> {
+            if (pendingCallback == owner) clearPending();
+        });
+    }
+
+    private void preparePendingDocumentScanner(String loadingMessage, CallbackContext owner) {
+        cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
+            cordova.getActivity(), loadingMessage, new DocumentScannerModuleInstaller.Callback() {
+                @Override
+                public void onReady(JSONObject result) {
+                    if (pendingCallback == owner) launchPendingActivity();
+                }
+
+                @Override
+                public void onError(JSONObject errorValue) {
+                    if (pendingCallback != owner) return;
+                    owner.error(errorValue);
+                    clearPending();
+                }
+            }
+        ));
+    }
+
+    private void ensureModelsAvailable(boolean face, boolean barcode, boolean ocr,
+                                       String loadingMessage, CallbackContext callbackContext,
+                                       Runnable onReady) {
+        ensureModelsAvailable(
+            face, barcode, ocr, loadingMessage, callbackContext, onReady, null
+        );
+    }
+
+    private void ensureModelsAvailable(boolean face, boolean barcode, boolean ocr,
+                                       String loadingMessage, CallbackContext callbackContext,
+                                       Runnable onReady, Runnable onErrorCleanup) {
+        boolean prepareFace = face && !"bundled".equals(androidModuleMode(FACE_MODE_METADATA));
+        boolean prepareBarcode = barcode
+            && !"bundled".equals(androidModuleMode(BARCODE_MODE_METADATA));
+        boolean prepareOcr = ocr && !"bundled".equals(androidModuleMode(OCR_MODE_METADATA));
+        if (!prepareFace && !prepareBarcode && !prepareOcr) {
+            onReady.run();
+            return;
+        }
+        cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
+            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, loadingMessage,
+            new MlKitModelsModuleInstaller.Callback() {
+                @Override
+                public void onReady(JSONObject result) {
+                    onReady.run();
+                }
+
+                @Override
+                public void onError(JSONObject errorValue) {
+                    callbackContext.error(errorValue);
+                    if (onErrorCleanup != null) onErrorCleanup.run();
+                }
+            }
+        ));
+    }
+
+    private static JSONObject optionsAt(JSONArray args, int index, String name) {
+        Object raw = args.opt(index);
+        if (raw == null || raw == JSONObject.NULL) return new JSONObject();
+        if (!(raw instanceof JSONObject)) {
+            throw new IllegalArgumentException(name + " must be an object.");
+        }
+        return (JSONObject) raw;
+    }
+
+    private static String moduleLoadingMessage(JSONObject options) {
+        if (options == null || !options.has("moduleLoadingMessage")
+            || options.isNull("moduleLoadingMessage")) {
+            return DEFAULT_MODULE_LOADING_MESSAGE;
+        }
+        Object value = options.opt("moduleLoadingMessage");
+        if (!(value instanceof String)) {
+            throw new IllegalArgumentException("moduleLoadingMessage must be a string or null.");
+        }
+        return (String) value;
     }
 
     private boolean documentScannerDeviceSupported() {

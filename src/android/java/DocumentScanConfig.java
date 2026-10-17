@@ -107,7 +107,8 @@ final class DocumentScanConfig {
         while (keys.hasNext()) {
             String key = keys.next();
             if (!("pageLimit".equals(key) || "galleryImportAllowed".equals(key)
-                || "resultFormats".equals(key) || "scannerMode".equals(key))) {
+                || "resultFormats".equals(key) || "scannerMode".equals(key)
+                || "moduleLoadingMessage".equals(key))) {
                 throw new IllegalArgumentException("Unknown document scan option: " + key + ".");
             }
         }
