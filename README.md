@@ -40,21 +40,16 @@ Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.
 
 ## Compatibility
 
-The Android implementation supports `cordova-android` 11 through 15 from one codebase. It selects tested CameraX and AndroidX versions from the installed `cordova-android` major version.
+The Android implementation supports `cordova-android` 12 through 15 and therefore requires Android 7.0 / API 24 or newer. It selects a tested CameraX version from the installed `cordova-android` major version.
 
 | cordova-android | CameraX | Bundled Face | Bundled Barcode | Bundled OCR | Document Scanner | Reference toolchain |
 | --- | --- | --- | --- | --- | --- | --- |
-| 11.x | 1.1.0 | 16.1.5 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 32 / AGP 7.2.1 / JDK 11 |
 | 12.x | 1.2.3 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 33 / AGP 7.4.2 / JDK 11 |
 | 13.x | 1.4.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 34 / AGP 8.3.0 / JDK 17 |
 | 14.x | 1.5.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 35 / AGP 8.7.3 / JDK 17 |
 | 15.x | 1.6.0 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 36 / AGP 8.10.1 / JDK 17 |
 
-With `bundled` delivery, face capture, barcode processing, and text recognition support Android 5.1 / API 22 and newer. `install-time` and `first-use` use Google Play services and require Android 6.0 / API 23 or newer; the document scanner also requires API 23 and at least 1.7 GB of total RAM. On an unsupported device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE`; the other modules remain available when their selected dependencies support the device.
-
-Selecting `install-time` or `first-use` for any module raises the generated Android application's minimum SDK to 23. API 22 is preserved only when Face, Barcode, and OCR are all `bundled`.
-
-Face, Barcode, and OCR can select their delivery modes independently; all default to `install-time`. The Android document-scanner UI and model are always delivered dynamically by Google Play services and can require a first-use download. See [Android model delivery](#android-model-delivery) for the available strategies. `cordova-android` 11 uses dependency versions compatible with compileSdk 32; newer Cordova Android versions use their normal modern dependency graph. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
+All Android delivery modes share the API 24 floor. Face, Barcode, and OCR can select their delivery modes independently; all default to `install-time`. The Android document-scanner UI and model are always delivered dynamically by Google Play services, require at least 1.7 GB of total RAM, and can require a first-use download. On an unsupported device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE`; the other modules remain available. See [Android model delivery](#android-model-delivery) for the delivery strategies. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
 
 The current Android Google Play services clients are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`. The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. Face capture, live and still-image barcode detection, and Latin text recognition use Google ML Kit CocoaPods `8.0.0`. Google does not provide the ML Kit Document Scanner API for iOS; document-scanner methods reject with `UNSUPPORTED_PLATFORM` there.
 
@@ -136,7 +131,7 @@ For each of Face Detection, Barcode Scanning, and Text Recognition, the plugin o
 
 | Mode | Advantages | Trade-offs | Estimated current CA15 payload |
 | --- | --- | --- | --- |
-| `bundled` | Immediate offline first use; supports API 22 | Larger APK/AAB; model updates require a new app build | ~98.5 MB for all three in a universal APK; ~21–33 MB in a single-ABI/AAB device delivery |
+| `bundled` | Immediate offline first use | Larger APK/AAB; model updates require a new app build | ~98.5 MB for all three in a universal APK; ~21–33 MB in a single-ABI/AAB device delivery |
 | `install-time` (**default**) | Smaller app; requests the selected module after Play Store installation | Best-effort prefetch; it may not be ready when the app opens and sideloaded APKs must not rely on it | Bundled model payload avoided; a small client library remains |
 | `first-use` | Smaller app; no module is downloaded unless its API is used | First use needs compatible Google Play services, storage, network, and download time | Bundled model payload avoided; a small client library remains |
 
@@ -185,9 +180,9 @@ Document Scanner is separate from this choice: it is always delivered dynamicall
 | Method | Android | iOS | Purpose |
 | --- | --- | --- | --- |
 | `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
-| `MlKit.prepareModels(modules?, options?)` | yes; API 23+ for Play services | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
-| `MlKit.prepareDocumentScanner(options?)` | API 23+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
-| `MlKit.scanDocument(options)` | API 23+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
+| `MlKit.prepareModels(modules?, options?)` | yes; Android 7+ | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
+| `MlKit.prepareDocumentScanner(options?)` | Android 7+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
+| `MlKit.scanDocument(options)` | Android 7+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
 | `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
 | `MlKit.scanBarcodes(imagePath, options)` | yes | yes | Returns every matching barcode detected in a local image. |
 | `MlKit.barcode.scan(options)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
@@ -236,7 +231,7 @@ if (result.status === "success") {
 }
 ```
 
-The method performs device checks before requesting the Google scanner. Android versions below API 23 and devices with less than 1.7 GB of total RAM reject with `UNSUPPORTED_DEVICE` instead of opening native scanner code.
+The method performs device checks before requesting the Google scanner. Android versions below API 24 and devices with less than 1.7 GB of total RAM reject with `UNSUPPORTED_DEVICE` instead of opening native scanner code.
 
 ### Document options
 
@@ -470,7 +465,7 @@ Other failures reject with a stable shape:
 ```json
 {
   "code": "UNSUPPORTED_DEVICE",
-  "message": "ML Kit Document Scanner requires Android 6.0 or newer and at least 1.7 GB of total RAM.",
+  "message": "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
   "recoverable": false
 }
 ```
@@ -523,7 +518,7 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 
 ## Known limitations
 
-- The document scanner is Android-only, requires API 23 and at least 1.7 GB RAM, depends on Google Play services, and can require a first-use component download.
+- The document scanner is Android-only, requires API 24 and at least 1.7 GB RAM, depends on Google Play services, and can require a first-use component download.
 - The Google Document Scanner always allows basic page editing, including crop and rotation; its native UI cannot be configured as an immutable front/back capture flow.
 - Text recognition currently includes only the Latin script recognizer.
 - Static-image APIs accept local resources only and do not download remote URLs.
@@ -547,13 +542,14 @@ Before release, validate installation and a debug build with each supported Cord
 
 ### 0.1.0
 
+- Set `cordova-android` 12 and Android 7.0 / API 24 as the minimum supported Android versions.
 - Added per-module Android delivery variables for Face, Barcode, and OCR, with `bundled`, `install-time`, and `first-use` modes.
 - Kept `ANDROID_MLKIT_MODEL_DELIVERY` as the global shortcut and made `install-time` the default for every module; legacy `play-services` maps to `install-time`.
 - Added automatic native loading indicators for missing Google Play services modules, with an optional localizable `moduleLoadingMessage` on every affected operation.
 - Added `MlKit.prepareModels(modules?, options?)` to explicitly wait for all or selected non-bundled modules before enabling dependent UI.
 - Added `MlKit.prepareDocumentScanner(options?)` to prepare the on-demand scanner component proactively.
 - Added Android `MlKit.scanDocument(options)` using the dynamically delivered ML Kit Document Scanner `16.0.0`.
-- Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 23, devices below 1.7 GB total RAM, and native unsupported responses.
+- Added structured `UNSUPPORTED_DEVICE` handling for Android versions below API 24, devices below 1.7 GB total RAM, and native unsupported responses.
 - Added `MlKit.recognizeText(imagePath)` on Android and iOS with bundled Latin text recognition.
 - Added `MlKit.scanBarcodes(imagePath, options)` on Android and iOS with all supported barcode formats.
 - Added `MlKit.barcode.scan(options)` on Android and iOS using ML Kit Barcode Scanning.

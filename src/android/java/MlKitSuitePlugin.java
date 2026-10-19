@@ -95,10 +95,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         pendingOptions = options;
         pendingAction = action;
         if ("documentScan".equals(action)) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !documentScannerDeviceSupported()) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !documentScannerDeviceSupported()) {
                 finishWithError(
                     "UNSUPPORTED_DEVICE",
-                    "ML Kit Document Scanner requires Android 6.0 or newer and at least 1.7 GB of total RAM.",
+                    "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
                     false
                 );
                 return true;
@@ -286,9 +286,9 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             document.put("prepare", true);
             document.put(
                 "deviceSupported",
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && documentScannerDeviceSupported()
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && documentScannerDeviceSupported()
             );
-            document.put("minimumAndroidApi", 23);
+            document.put("minimumAndroidApi", 24);
             document.put("dynamicallyDelivered", true);
             document.put("minimumTotalRamMb", 1700);
             document.put("resultFormats", new JSONArray().put("JPEG").put("PDF"));
@@ -350,10 +350,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     }
 
     private void prepareDocumentScanner(JSONArray args, CallbackContext callbackContext) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !documentScannerDeviceSupported()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !documentScannerDeviceSupported()) {
             callbackContext.error(error(
                 "UNSUPPORTED_DEVICE",
-                "ML Kit Document Scanner requires Android 6.0 or newer and at least 1.7 GB of total RAM.",
+                "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
                 false
             ));
             return;

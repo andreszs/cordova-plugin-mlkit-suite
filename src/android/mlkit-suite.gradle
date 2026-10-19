@@ -20,7 +20,6 @@ def mlKitSuiteReadCordovaAndroidMajor() {
     if (configFile.exists()) {
         def config = new JsonSlurper().parse(configFile)
         def knownToolchains = [
-            '7.2.1:32': 11,
             '7.4.2:33': 12,
             '8.3.0:34': 13,
             '8.7.3:35': 14,
@@ -81,14 +80,12 @@ def mlKitSuiteNormalizeMode(String rawValue, String variableName) {
 }
 
 def cameraXByCordova = [
-    11: '1.1.0',
     12: '1.2.3',
     13: '1.4.2',
     14: '1.5.2',
     15: '1.6.0'
 ]
 def webKitByCordova = [
-    11: '1.4.0',
     12: '1.6.0',
     13: '1.6.0',
     14: '1.12.1',
@@ -109,14 +106,13 @@ def readModuleMode = { String variableName ->
 def faceMode = readModuleMode('ANDROID_MLKIT_FACE_MODE')
 def barcodeMode = readModuleMode('ANDROID_MLKIT_BARCODE_MODE')
 def ocrMode = readModuleMode('ANDROID_MLKIT_OCR_MODE')
-def usesPlayServicesModels = [faceMode, barcodeMode, ocrMode].any { it != 'bundled' }
 def installTimeModules = []
 if (faceMode == 'install-time') installTimeModules.add('face')
 if (barcodeMode == 'install-time') installTimeModules.add('barcode')
 if (ocrMode == 'install-time') installTimeModules.add('ocr')
 
-if (usesPlayServicesModels && cordovaConfig.MIN_SDK_VERSION < 23) {
-    cordovaConfig.MIN_SDK_VERSION = 23
+if (cordovaConfig.MIN_SDK_VERSION < 24) {
+    cordovaConfig.MIN_SDK_VERSION = 24
 }
 def cameraXVersion = project.findProperty('mlKitSuiteCameraXVersion')?.toString()
 def mlKitFaceVersion = project.findProperty('mlKitSuiteFaceDetectionVersion')?.toString()
@@ -126,14 +122,11 @@ if (cameraXVersion == null || cameraXVersion.trim().isEmpty()) {
 if (cameraXVersion == null) {
     throw new GradleException(
         "cordova-plugin-mlkit-suite: cordova-android ${cordovaAndroidMajor} is not supported. " +
-        'Supported versions: 11, 12, 13, 14 and 15.'
+        'Supported versions: 12, 13, 14 and 15.'
     )
 }
 if (mlKitFaceVersion == null || mlKitFaceVersion.trim().isEmpty()) {
-    // ML Kit 16.1.6+ pulls AppCompat 1.6.1, whose AAR metadata requires
-    // compileSdk 33. cordova-android 11 intentionally compiles with SDK 32,
-    // so it uses the last compatible bundled face model.
-    mlKitFaceVersion = cordovaAndroidMajor == 11 ? '16.1.5' : '16.1.7'
+    mlKitFaceVersion = '16.1.7'
 }
 
 logger.lifecycle(
@@ -160,24 +153,6 @@ android {
             manifestPlaceholders.mlKitSuiteDependencyMetadataName =
                 'com.andreszs.plugins.mlkitsuite.NO_INSTALL_TIME_MODELS'
             manifestPlaceholders.mlKitSuiteDependencyMetadataValue = 'true'
-        }
-    }
-}
-
-// The document scanner currently resolves ML Kit Common 18.11.0, which in
-// turn requests AndroidX releases whose AAR metadata requires compileSdk 33.
-// cordova-android 11 intentionally compiles with SDK 32, so keep its AndroidX
-// graph on the compatible line used by that Cordova release. This does not
-// change the app's minSdk or affect cordova-android 12+.
-if (cordovaAndroidMajor == 11) {
-    configurations.all {
-        resolutionStrategy {
-            force 'androidx.appcompat:appcompat:1.4.2'
-            force 'androidx.appcompat:appcompat-resources:1.4.2'
-            force 'androidx.activity:activity:1.5.1'
-            force 'androidx.core:core:1.8.0'
-            force 'androidx.core:core-ktx:1.8.0'
-            force 'androidx.annotation:annotation-experimental:1.2.0'
         }
     }
 }

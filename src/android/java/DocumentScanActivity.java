@@ -40,10 +40,10 @@ public final class DocumentScanActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         if (state != null) return;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !hasRequiredMemory()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !hasRequiredMemory()) {
             finishWithError(
                 "UNSUPPORTED_DEVICE",
-                "ML Kit Document Scanner requires Android 6.0 or newer and at least 1.7 GB of total RAM.",
+                "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
                 false
             );
             return;
