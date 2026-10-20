@@ -7,8 +7,12 @@ var path = require('path');
 
 var output = fs.mkdtempSync(path.join(os.tmpdir(), 'mlkit-suite-java-test-'));
 var root = path.resolve(__dirname, '..');
-var source = path.join(root, 'src', 'android', 'java', 'BarcodeConfirmationTracker.java');
-var test = path.join(root, 'tests', 'java', 'BarcodeConfirmationTrackerTest.java');
+var sources = [
+    path.join(root, 'src', 'android', 'java', 'BarcodeConfirmationTracker.java'),
+    path.join(root, 'src', 'android', 'java', 'BarcodeScanRegion.java'),
+    path.join(root, 'tests', 'java', 'BarcodeConfirmationTrackerTest.java'),
+    path.join(root, 'tests', 'java', 'BarcodeScanRegionTest.java')
+];
 var executable = process.platform === 'win32' ? '.exe' : '';
 var javaHomes = [
     process.env.JAVA_HOME,
@@ -25,9 +29,12 @@ var javac = javaHome ? path.join(javaHome, 'bin', 'javac' + executable) : 'javac
 var java = javaHome ? path.join(javaHome, 'bin', 'java' + executable) : 'java';
 
 try {
-    childProcess.execFileSync(javac, ['-d', output, source, test], { stdio: 'inherit' });
+    childProcess.execFileSync(javac, ['-d', output].concat(sources), { stdio: 'inherit' });
     childProcess.execFileSync(java, [
         '-cp', output, 'com.andreszs.plugins.mlkitsuite.BarcodeConfirmationTrackerTest'
+    ], { stdio: 'inherit' });
+    childProcess.execFileSync(java, [
+        '-cp', output, 'com.andreszs.plugins.mlkitsuite.BarcodeScanRegionTest'
     ], { stdio: 'inherit' });
 } finally {
     fs.rmSync(output, { recursive: true, force: true });

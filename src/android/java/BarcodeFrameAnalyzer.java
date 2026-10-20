@@ -19,6 +19,8 @@ import java.util.concurrent.Executor;
 final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseable {
     interface Listener {
         void onSearching();
+        void onOutsideGuide();
+        boolean isInsideGuide(Barcode barcode, int imageWidth, int imageHeight);
         void onCandidate(String text, String format, int confirmedFrames, int requiredFrames);
         void onConfirmed(String text, String format);
         void onAnalyzerError(Exception error);
@@ -57,8 +59,12 @@ final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseabl
         }
         InputImage image = InputImage.fromMediaImage(mediaImage,
             imageProxy.getImageInfo().getRotationDegrees());
+        int rotation = imageProxy.getImageInfo().getRotationDegrees();
+        int imageWidth = rotation % 180 == 0 ? imageProxy.getWidth() : imageProxy.getHeight();
+        int imageHeight = rotation % 180 == 0 ? imageProxy.getHeight() : imageProxy.getWidth();
         scanner.process(image)
-            .addOnSuccessListener(callbackExecutor, this::handleBarcodes)
+            .addOnSuccessListener(callbackExecutor,
+                barcodes -> handleBarcodes(barcodes, imageWidth, imageHeight))
             .addOnFailureListener(callbackExecutor, error -> {
                 tracker.reset();
                 listener.onAnalyzerError(error);
@@ -66,19 +72,24 @@ final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseabl
             .addOnCompleteListener(task -> imageProxy.close());
     }
 
-    private void handleBarcodes(List<Barcode> barcodes) {
+    private void handleBarcodes(List<Barcode> barcodes, int imageWidth, int imageHeight) {
         if (completed) return;
         Barcode selected = null;
+        boolean detectedOutsideGuide = false;
         for (Barcode barcode : barcodes) {
             String rawValue = barcode.getRawValue();
             if (rawValue != null && !rawValue.isEmpty()) {
-                selected = barcode;
-                break;
+                if (listener.isInsideGuide(barcode, imageWidth, imageHeight)) {
+                    selected = barcode;
+                    break;
+                }
+                detectedOutsideGuide = true;
             }
         }
         if (selected == null) {
             tracker.reset();
-            listener.onSearching();
+            if (detectedOutsideGuide) listener.onOutsideGuide();
+            else listener.onSearching();
             return;
         }
 

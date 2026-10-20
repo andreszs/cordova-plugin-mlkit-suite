@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.mlkit.vision.barcode.common.Barcode;
 
 import org.json.JSONObject;
 
@@ -129,7 +130,7 @@ public final class BarcodeScanActivity extends Activity
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
         root.addView(previewView, matchParent());
 
-        overlayView = new BarcodeOverlayView(this, config.instructionText);
+        overlayView = new BarcodeOverlayView(this, config.instructionText, config.guideColor);
         root.addView(overlayView, matchParent());
 
         if (config.showCloseButton) {
@@ -213,6 +214,18 @@ public final class BarcodeScanActivity extends Activity
     @Override
     public void onSearching() {
         if (!completed) overlayView.update("Looking for a barcode", false);
+    }
+
+    @Override
+    public void onOutsideGuide() {
+        if (!completed) overlayView.update("Center the barcode inside the frame", false);
+    }
+
+    @Override
+    public boolean isInsideGuide(Barcode barcode, int imageWidth, int imageHeight) {
+        return !completed && overlayView.containsBarcode(
+            barcode.getBoundingBox(), imageWidth, imageHeight
+        );
     }
 
     @Override

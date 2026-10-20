@@ -186,7 +186,7 @@ exports.barcode = {
      *
      * @param {{formats?: string[]|string, showCloseButton?: boolean,
      *          showTorchButton?: boolean,
-     *          instructionText?: string, timeoutMs?: number,
+     *          instructionText?: string, guideColor?: string|null, timeoutMs?: number,
      *          moduleLoadingMessage?: string|null}} options
      * @returns {Promise<object>} A success result or {status: 'cancelled', reason: 'user'}.
      */

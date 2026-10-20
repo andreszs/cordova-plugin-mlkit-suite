@@ -53,7 +53,10 @@ final class BarcodeScanViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
 
-        overlayView = BarcodeOverlayView(instruction: options.instructionText)
+        overlayView = BarcodeOverlayView(
+            instruction: options.instructionText,
+            guideColor: options.guideColor
+        )
         overlayView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(overlayView)
         NSLayoutConstraint.activate([
@@ -228,14 +231,29 @@ final class BarcodeScanViewController: UIViewController {
         }
     }
 
-    private func handle(_ barcodes: [Barcode]) {
+    private func handle(_ barcodes: [Barcode], imageSize: CGSize) {
         guard !analysisFinished else { return }
-        guard let barcode = barcodes.first(where: {
+        let decoded = barcodes.filter {
             guard let text = $0.rawValue ?? $0.displayValue else { return false }
             return !text.isEmpty
-        }), let text = barcode.rawValue ?? barcode.displayValue else {
+        }
+        let barcode = decoded.first { candidate in
+            var contained = false
+            DispatchQueue.main.sync { [weak self] in
+                contained = self?.overlayView.contains(
+                    barcodeFrame: candidate.frame, imageSize: imageSize
+                ) ?? false
+            }
+            return contained
+        }
+        guard let barcode = barcode, let text = barcode.rawValue ?? barcode.displayValue else {
             resetConfirmation()
-            updateOverlay(message: "Looking for a barcode", hasCandidate: false)
+            updateOverlay(
+                message: decoded.isEmpty
+                    ? "Looking for a barcode"
+                    : "Center the barcode inside the frame",
+                hasCandidate: false
+            )
             return
         }
 
@@ -315,13 +333,23 @@ extension BarcodeScanViewController: AVCaptureVideoDataOutputSampleBufferDelegat
         processingFrame = true
         let image = VisionImage(buffer: sampleBuffer)
         image.orientation = .right
+        let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+        let imageSize: CGSize
+        if let imageBuffer = imageBuffer {
+            imageSize = CGSize(
+                width: CVPixelBufferGetHeight(imageBuffer),
+                height: CVPixelBufferGetWidth(imageBuffer)
+            )
+        } else {
+            imageSize = .zero
+        }
         scanner.process(image) { [weak self] barcodes, error in
             guard let self = self else { return }
             self.analysisQueue.async {
                 self.processingFrame = false
                 guard !self.analysisFinished else { return }
                 if error == nil {
-                    self.handle(barcodes ?? [])
+                    self.handle(barcodes ?? [], imageSize: imageSize)
                 } else {
                     self.resetConfirmation()
                     self.updateOverlay(message: "Unable to analyze the camera image", hasCandidate: false)

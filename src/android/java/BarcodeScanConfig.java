@@ -1,5 +1,7 @@
 package com.andreszs.plugins.mlkitsuite;
 
+import android.graphics.Color;
+
 import com.google.mlkit.vision.barcode.common.Barcode;
 
 import org.json.JSONArray;
@@ -41,11 +43,12 @@ final class BarcodeScanConfig {
     final boolean showCloseButton;
     final boolean showTorchButton;
     final String instructionText;
+    final Integer guideColor;
     final long timeoutMs;
 
     private BarcodeScanConfig(List<String> formatNames,
                               boolean showCloseButton, boolean showTorchButton,
-                              String instructionText, long timeoutMs) {
+                              String instructionText, Integer guideColor, long timeoutMs) {
         this.formatNames = Collections.unmodifiableList(formatNames);
         this.formatValues = new int[formatNames.size()];
         for (int index = 0; index < formatNames.size(); index++) {
@@ -54,6 +57,7 @@ final class BarcodeScanConfig {
         this.showCloseButton = showCloseButton;
         this.showTorchButton = showTorchButton;
         this.instructionText = instructionText;
+        this.guideColor = guideColor;
         this.timeoutMs = timeoutMs;
     }
 
@@ -65,8 +69,9 @@ final class BarcodeScanConfig {
         boolean torch = strictBoolean(value, "showTorchButton", true);
         String instruction = strictString(value, "instructionText",
             "Place a barcode inside the frame");
+        Integer guideColor = strictColor(value, "guideColor");
         long timeout = strictLong(value, "timeoutMs", 0L, 0L, 600000L);
-        return new BarcodeScanConfig(formats, close, torch, instruction, timeout);
+        return new BarcodeScanConfig(formats, close, torch, instruction, guideColor, timeout);
     }
 
     static JSONArray supportedFormatsJson() {
@@ -134,7 +139,8 @@ final class BarcodeScanConfig {
             String key = keys.next();
             if (!("formats".equals(key)
                 || "showCloseButton".equals(key) || "showTorchButton".equals(key)
-                || "instructionText".equals(key) || "timeoutMs".equals(key)
+                || "instructionText".equals(key) || "guideColor".equals(key)
+                || "timeoutMs".equals(key)
                 || "moduleLoadingMessage".equals(key))) {
                 throw new IllegalArgumentException("Unknown barcode scan option: " + key + ".");
             }
@@ -153,6 +159,15 @@ final class BarcodeScanConfig {
         Object value = object.opt(name);
         if (!(value instanceof String)) throw new IllegalArgumentException(name + " must be a string.");
         return ((String) value).trim();
+    }
+
+    private static Integer strictColor(JSONObject object, String name) {
+        if (!object.has(name) || object.isNull(name)) return null;
+        Object value = object.opt(name);
+        if (!(value instanceof String) || !((String) value).matches("^#[0-9A-Fa-f]{6}$")) {
+            throw new IllegalArgumentException(name + " must be a color in #RRGGBB format.");
+        }
+        return Color.parseColor((String) value);
     }
 
     private static long strictLong(JSONObject object, String name, long fallback, long min, long max) {

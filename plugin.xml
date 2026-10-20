@@ -80,6 +80,7 @@
         <source-file src="src/android/java/BarcodeScanActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/BarcodeScanConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/BarcodeConfirmationTracker.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/BarcodeScanRegion.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/BarcodeFrameAnalyzer.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/BarcodeOverlayView.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/DocumentScanConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />

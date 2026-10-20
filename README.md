@@ -315,6 +315,7 @@ const result = await MlKit.barcode.scan({
     showCloseButton: true,
     showTorchButton: true,
     instructionText: "Place a barcode inside the frame",
+    guideColor: null,
     moduleLoadingMessage: "Cargando detector de códigos…",
     timeoutMs: 45000
 });
@@ -324,7 +325,7 @@ if (result.status === "success") {
 }
 ```
 
-Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format. A missing or different value resets confirmation.
+Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. The four-color corner guide is the active scan region: codes outside it or crossing its edges are ignored. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format while fully inside the guide. A missing, outside, or different value resets confirmation.
 
 ### Barcode formats
 
@@ -354,6 +355,7 @@ Both barcode methods support all 13 formats exposed by ML Kit Barcode Scanning:
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. Android Back still cancels when hidden. |
 | `showTorchButton` | `boolean` | `true` | Shows a torch toggle when the rear camera has flash hardware. |
 | `instructionText` | `string \| null` | `"Place a barcode inside the frame"` | Text shown above the guide. An empty string hides it. |
+| `guideColor` | `string \| null` | `null` | Optional `#RRGGBB` color for all four guide corners. When omitted, the default blue, yellow, green, and red corners are used. A detected in-guide barcode always changes them to green. |
 | `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading Barcode Scanning. Empty string shows only the spinner. |
 | `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
@@ -554,6 +556,7 @@ Before release, validate installation and a debug build with each supported Cord
 - Added `MlKit.scanBarcodes(imagePath, options)` on Android and iOS with all supported barcode formats.
 - Added `MlKit.barcode.scan(options)` on Android and iOS using ML Kit Barcode Scanning.
 - Added high-resolution CameraX and AVFoundation analysis, rear-camera preview, optional torch control, and two-frame barcode confirmation.
+- Added a four-color camera guide with optional `guideColor` override and restricted live results to barcodes fully contained inside it.
 - Kept all document and barcode payload handling generic and country-agnostic.
 - Added the extensible `MlKit` namespace and capability discovery.
 - Added `MlKit.face.capture(options)` for Android and iOS.

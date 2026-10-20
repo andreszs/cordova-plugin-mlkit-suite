@@ -1,6 +1,7 @@
 import CoreFoundation
 import Foundation
 import MLKitBarcodeScanning
+import UIKit
 
 enum BarcodeFormatSupport {
     static let names = [
@@ -81,12 +82,13 @@ struct BarcodeScanOptions {
     let showCloseButton: Bool
     let showTorchButton: Bool
     let instructionText: String
+    let guideColor: UIColor?
     let timeoutMs: Int
 
     init(dictionary: [String: Any]) throws {
         let known = Set([
             "formats", "showCloseButton", "showTorchButton", "instructionText",
-            "timeoutMs", "moduleLoadingMessage"
+            "guideColor", "timeoutMs", "moduleLoadingMessage"
         ])
         for key in dictionary.keys where !known.contains(key) {
             throw MlKitSuiteError.invalidArgument("Unknown barcode scan option: \(key).")
@@ -129,6 +131,28 @@ struct BarcodeScanOptions {
         } else {
             instructionText = "Place a barcode inside the frame"
         }
+        if let raw = dictionary["guideColor"], !(raw is NSNull) {
+            guard let string = raw as? String,
+                  let color = Self.color(from: string) else {
+                throw MlKitSuiteError.invalidArgument(
+                    "guideColor must be a color in #RRGGBB format."
+                )
+            }
+            guideColor = color
+        } else {
+            guideColor = nil
+        }
+    }
+
+    private static func color(from value: String) -> UIColor? {
+        guard value.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil,
+              let rgb = UInt32(value.dropFirst(), radix: 16) else { return nil }
+        return UIColor(
+            red: CGFloat((rgb >> 16) & 0xff) / 255,
+            green: CGFloat((rgb >> 8) & 0xff) / 255,
+            blue: CGFloat(rgb & 0xff) / 255,
+            alpha: 1
+        )
     }
 }
 
