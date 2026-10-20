@@ -37,7 +37,8 @@ final class DocumentScannerModuleInstaller {
             .addOnFailureListener(error -> callback.onResult(null));
     }
 
-    static void prepare(Activity activity, String loadingMessage, Callback callback) {
+    static void prepare(Activity activity, String loadingMessage,
+                        MlKitLocalization localization, Callback callback) {
         GmsDocumentScanner scanner = GmsDocumentScanning.getClient(
             new GmsDocumentScannerOptions.Builder().build()
         );
@@ -51,18 +52,19 @@ final class DocumentScannerModuleInstaller {
                         activity, loadingMessage
                     );
                     loadingDialog.show();
-                    install(client, scanner, loadingDialog, callback);
+                    install(client, scanner, loadingDialog, localization, callback);
                 }
             })
             .addOnFailureListener(error -> callback.onError(MlKitSuitePlugin.error(
                 "SCANNER_UNAVAILABLE",
-                "Unable to check the Document Scanner component.",
+                localization.text("document_check_failed"),
                 true
             )));
     }
 
     private static void install(ModuleInstallClient client, GmsDocumentScanner scanner,
-                                MlKitLoadingDialog loadingDialog, Callback callback) {
+                                MlKitLoadingDialog loadingDialog,
+                                MlKitLocalization localization, Callback callback) {
         AtomicBoolean finished = new AtomicBoolean(false);
         InstallStatusListener[] listenerHolder = new InstallStatusListener[1];
         listenerHolder[0] = update -> {
@@ -73,7 +75,7 @@ final class DocumentScannerModuleInstaller {
                 finishError(
                     client, listenerHolder[0], loadingDialog, callback, finished,
                     "MODULE_DOWNLOAD_CANCELLED",
-                    "Document Scanner component download was cancelled.",
+                    localization.text("document_download_cancelled"),
                     true
                 );
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_FAILED) {
@@ -81,7 +83,7 @@ final class DocumentScannerModuleInstaller {
                 finishError(
                     client, listenerHolder[0], loadingDialog, callback, finished,
                     "MODULE_DOWNLOAD_FAILED",
-                    "Unable to download the Document Scanner component (" + status + ").",
+                    localization.format("document_download_failed", status),
                     true
                 );
             }
@@ -100,7 +102,7 @@ final class DocumentScannerModuleInstaller {
             .addOnFailureListener(error -> finishError(
                 client, listenerHolder[0], loadingDialog, callback, finished,
                 "MODULE_DOWNLOAD_FAILED",
-                "Unable to start the Document Scanner component download.",
+                localization.text("document_download_start_failed"),
                 true
             ));
     }

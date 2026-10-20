@@ -70,6 +70,9 @@
 
         <framework src="src/android/mlkit-suite.gradle" custom="true" type="gradleReference" />
         <resource-file src="src/android/res/values/mlkit_suite_styles.xml" target="res/values/mlkit_suite_styles.xml" />
+        <resource-file src="src/android/res/values/mlkit_suite_strings.xml" target="res/values/mlkit_suite_strings.xml" />
+        <resource-file src="src/android/res/values-es/mlkit_suite_strings.xml" target="res/values-es/mlkit_suite_strings.xml" />
+        <source-file src="src/android/java/MlKitLocalization.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/MlKitSuitePlugin.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
@@ -101,6 +104,7 @@
         </config-file>
 
         <source-file src="src/ios/FaceCaptureTypes.swift" />
+        <source-file src="src/ios/MlKitLocalization.swift" />
         <source-file src="src/ios/FaceOverlayView.swift" />
         <source-file src="src/ios/FaceStillProcessor.swift" />
         <source-file src="src/ios/FaceCaptureViewController.swift" />
@@ -109,6 +113,7 @@
         <source-file src="src/ios/BarcodeScanViewController.swift" />
         <source-file src="src/ios/MlKitSuitePlugin.swift" />
         <resource-file src="src/ios/MlKitSuitePrivacy.bundle" target="MlKitSuitePrivacy.bundle" />
+        <resource-file src="src/ios/MlKitSuiteResources.bundle" target="MlKitSuiteResources.bundle" />
 
         <framework src="AVFoundation.framework" />
         <framework src="CoreImage.framework" />

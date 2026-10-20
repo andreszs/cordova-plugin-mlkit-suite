@@ -35,22 +35,31 @@ public final class DocumentScanActivity extends Activity {
 
     private static final int SCANNER_REQUEST = 8641;
     private static final long MINIMUM_TOTAL_MEMORY_BYTES = 1_700_000_000L;
+    private MlKitLocalization localization;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         if (state != null) return;
+        JSONObject raw;
+        try {
+            raw = new JSONObject(getIntent().getStringExtra(EXTRA_OPTIONS_JSON));
+            localization = MlKitLocalization.from(this, raw);
+        } catch (Exception exception) {
+            localization = MlKitLocalization.from(this, (Object) null);
+            finishWithError("INVALID_ARGUMENT", exception.getMessage(), false);
+            return;
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !hasRequiredMemory()) {
             finishWithError(
                 "UNSUPPORTED_DEVICE",
-                "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
+                localization.text("document_requirements"),
                 false
             );
             return;
         }
         try {
-            JSONObject raw = new JSONObject(getIntent().getStringExtra(EXTRA_OPTIONS_JSON));
-            DocumentScanConfig config = DocumentScanConfig.fromJson(raw);
+            DocumentScanConfig config = DocumentScanConfig.fromJson(this, raw);
             GmsDocumentScanner scanner = GmsDocumentScanning.getClient(config.toNativeOptions());
             scanner.getStartScanIntent(this)
                 .addOnSuccessListener(this::launchScanner)
@@ -58,7 +67,8 @@ public final class DocumentScanActivity extends Activity {
         } catch (IllegalArgumentException exception) {
             finishWithError("INVALID_ARGUMENT", exception.getMessage(), false);
         } catch (Exception exception) {
-            finishWithError("SCANNER_UNAVAILABLE", "Unable to initialize Document Scanner.", true);
+            finishWithError("SCANNER_UNAVAILABLE",
+                localization.text("document_initialize_failed"), true);
         }
     }
 
@@ -74,7 +84,8 @@ public final class DocumentScanActivity extends Activity {
         try {
             startIntentSenderForResult(sender, SCANNER_REQUEST, null, 0, 0, 0);
         } catch (IntentSender.SendIntentException exception) {
-            finishWithError("SCANNER_UNAVAILABLE", "Unable to open Document Scanner.", true);
+            finishWithError("SCANNER_UNAVAILABLE",
+                localization.text("document_open_failed"), true);
         }
     }
 
@@ -83,14 +94,14 @@ public final class DocumentScanActivity extends Activity {
             && ((MlKitException) exception).getErrorCode() == MlKitException.UNSUPPORTED) {
             finishWithError(
                 "UNSUPPORTED_DEVICE",
-                "ML Kit Document Scanner is not supported on this device.",
+                localization.text("document_unsupported"),
                 false
             );
             return;
         }
         String message = exception.getLocalizedMessage();
         if (message == null || message.trim().isEmpty()) {
-            message = "ML Kit Document Scanner is unavailable.";
+            message = localization.text("document_unavailable");
         }
         finishWithError("SCANNER_UNAVAILABLE", message, true);
     }
@@ -100,7 +111,7 @@ public final class DocumentScanActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != SCANNER_REQUEST) return;
         if (resultCode != RESULT_OK) {
-            finishWithError("USER_CANCELLED", "Document scanning was cancelled by the user.", true);
+            finishWithError("USER_CANCELLED", localization.text("document_cancelled"), true);
             return;
         }
         try {
@@ -108,7 +119,8 @@ public final class DocumentScanActivity extends Activity {
             if (result == null) throw new IllegalStateException("Document Scanner returned no result.");
             finishWithSuccess(copyResult(result));
         } catch (Exception exception) {
-            finishWithError("PROCESSING_FAILED", "Unable to persist the scanned document.", true);
+            finishWithError("PROCESSING_FAILED",
+                localization.text("document_persist_failed"), true);
         }
     }
 

@@ -74,7 +74,7 @@ public final class FaceCaptureActivity extends Activity
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         try {
-            config = FaceCaptureConfig.fromJson(new JSONObject(
+            config = FaceCaptureConfig.fromJson(this, new JSONObject(
                 getIntent().getStringExtra(EXTRA_OPTIONS_JSON)));
             imageWebBaseUrl = getIntent().getStringExtra(EXTRA_IMAGE_WEB_BASE_URL);
             stillProcessor = new FaceStillProcessor(config);
@@ -140,12 +140,14 @@ public final class FaceCaptureActivity extends Activity
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
         root.addView(previewView, matchParent());
 
-        overlayView = new FaceOverlayView(this, config.instructionText, config.debugMode);
+        overlayView = new FaceOverlayView(this, config.instructionText, config.debugMode,
+            config.localization.text("face_searching"));
         root.addView(overlayView, matchParent());
 
         if (config.showCloseButton) {
             Button close = new Button(this);
-            close.setText("Close");
+            close.setText(config.localization.text("close"));
+            close.setContentDescription(config.localization.text("close_face"));
             close.setTextColor(Color.WHITE);
             close.setTextSize(16);
             close.setAllCaps(false);
@@ -166,7 +168,8 @@ public final class FaceCaptureActivity extends Activity
             try {
                 cameraProvider = future.get();
                 if (!cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
-                    finishWithError("CAMERA_UNAVAILABLE", "A front camera is not available.", false);
+                    finishWithError("CAMERA_UNAVAILABLE",
+                        config.localization.text("front_camera_missing"), false);
                     return;
                 }
                 Preview preview = new Preview.Builder().build();
@@ -187,8 +190,8 @@ public final class FaceCaptureActivity extends Activity
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA,
                     preview, imageAnalysis, imageCapture);
             } catch (Exception error) {
-                finishWithError("CAMERA_UNAVAILABLE", "Unable to start the front camera: "
-                    + error.getMessage(), true);
+                finishWithError("CAMERA_UNAVAILABLE",
+                    config.localization.format("front_camera_start_failed", error.getMessage()), true);
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -202,14 +205,16 @@ public final class FaceCaptureActivity extends Activity
 
     @Override
     public void onAnalyzerError(Exception error) {
-        if (!completed && !capturing) overlayView.update(null, "Unable to analyze the camera image");
+        if (!completed && !capturing) {
+            overlayView.update(null, config.localization.text("face_analyze_failed"));
+        }
     }
 
     private void beginCapture(FaceCaptureModels.Analysis analysis) {
         if (capturing || completed || imageCapture == null) return;
         capturing = true;
         overlayView.update(analysis.withState(FaceCaptureModels.State.CAPTURING,
-            analysis.stableDurationMs), "Capturing — hold still");
+            analysis.stableDurationMs), config.localization.text("face_capturing"));
         mainHandler.postDelayed(this::capturePhoto, 150L);
     }
 
@@ -233,7 +238,7 @@ public final class FaceCaptureActivity extends Activity
                     @Override public void onFailure(Exception error) {
                         raw.delete();
                         mainHandler.post(() -> finishWithError("PROCESSING_FAILED",
-                            "Unable to process the captured photo: " + error.getMessage(), true));
+                            config.localization.format("face_process_failed", error.getMessage()), true));
                     }
                 });
             }
@@ -241,7 +246,7 @@ public final class FaceCaptureActivity extends Activity
             @Override
             public void onError(@NonNull ImageCaptureException exception) {
                 raw.delete();
-                mainHandler.post(() -> retry("Unable to capture the photo. Please try again."));
+                mainHandler.post(() -> retry(config.localization.text("face_capture_retry")));
             }
         });
     }
@@ -252,7 +257,7 @@ public final class FaceCaptureActivity extends Activity
         mainHandler.postDelayed(() -> {
             if (!completed) {
                 capturing = false;
-                overlayView.update(null, "Looking for a face");
+                overlayView.update(null, config.localization.text("face_searching"));
             }
         }, 900L);
     }
@@ -295,7 +300,7 @@ public final class FaceCaptureActivity extends Activity
         completed = true;
         Intent intent = new Intent();
         intent.putExtra(EXTRA_ERROR_CODE, "USER_CANCELLED");
-        intent.putExtra(EXTRA_ERROR_MESSAGE, "Face capture was cancelled by the user.");
+        intent.putExtra(EXTRA_ERROR_MESSAGE, config.localization.text("face_cancelled"));
         intent.putExtra(EXTRA_ERROR_RECOVERABLE, true);
         setResult(RESULT_CANCELED, intent);
         finish();
@@ -315,25 +320,25 @@ public final class FaceCaptureActivity extends Activity
     private void scheduleTimeout() {
         if (config.timeoutMs <= 0) return;
         timeoutRunnable = () -> finishWithError("TIMEOUT",
-            "No acceptable face photo was captured before the timeout.", true);
+            config.localization.text("face_timeout"), true);
         mainHandler.postDelayed(timeoutRunnable, config.timeoutMs);
     }
 
     private String messageFor(FaceCaptureModels.State state) {
         switch (state) {
-            case MULTIPLE_FACES: return "Only one person should be visible";
-            case MOVE_CLOSER: return "Move closer";
-            case MOVE_AWAY: return "Move farther away";
-            case CENTER_FACE: return "Center your face";
-            case LOOK_STRAIGHT: return "Look straight at the camera";
-            case OPEN_EYES: return "Keep both eyes open";
-            case NEUTRAL_EXPRESSION: return "Use a neutral expression";
-            case IMPROVE_LIGHTING: return "Move to a brighter place";
-            case REDUCE_LIGHTING: return "Reduce direct light";
-            case HOLD_STILL: return "Hold still";
-            case READY: return "Ready";
-            case CAPTURING: return "Capturing — hold still";
-            default: return "Place your face inside the oval";
+            case MULTIPLE_FACES: return config.localization.text("face_multiple");
+            case MOVE_CLOSER: return config.localization.text("face_move_closer");
+            case MOVE_AWAY: return config.localization.text("face_move_away");
+            case CENTER_FACE: return config.localization.text("face_center");
+            case LOOK_STRAIGHT: return config.localization.text("face_look_straight");
+            case OPEN_EYES: return config.localization.text("face_open_eyes");
+            case NEUTRAL_EXPRESSION: return config.localization.text("face_neutral");
+            case IMPROVE_LIGHTING: return config.localization.text("face_more_light");
+            case REDUCE_LIGHTING: return config.localization.text("face_less_light");
+            case HOLD_STILL: return config.localization.text("face_hold_still");
+            case READY: return config.localization.text("face_ready");
+            case CAPTURING: return config.localization.text("face_capturing");
+            default: return config.localization.text("face_instruction");
         }
     }
 

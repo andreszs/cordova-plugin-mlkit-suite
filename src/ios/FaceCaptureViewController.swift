@@ -61,7 +61,11 @@ final class FaceCaptureViewController: UIViewController {
         previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
-        overlayView = FaceOverlayView(instruction: options.instructionText, debugMode: options.debugMode)
+        overlayView = FaceOverlayView(
+            instruction: options.instructionText,
+            debugMode: options.debugMode,
+            initialMessage: options.localization.text("face_searching")
+        )
         overlayView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(overlayView)
         NSLayoutConstraint.activate([
@@ -96,7 +100,8 @@ final class FaceCaptureViewController: UIViewController {
 
     private func addCloseButton() {
         let button = UIButton(type: .system)
-        button.setTitle("Close", for: .normal)
+        button.setTitle(options.localization.text("close"), for: .normal)
+        button.accessibilityLabel = options.localization.text("close_face")
         button.setTitleColor(.white, for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -117,11 +122,13 @@ final class FaceCaptureViewController: UIViewController {
                 self.session.beginConfiguration()
                 self.session.sessionPreset = .photo
                 guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-                    throw MlKitSuiteError.cameraUnavailable("A front camera is not available.", false)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("front_camera_missing"), false)
                 }
                 let input = try AVCaptureDeviceInput(device: camera)
                 guard self.session.canAddInput(input) else {
-                    throw MlKitSuiteError.cameraUnavailable("Unable to connect the front camera.", true)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("front_camera_connect_failed"), true)
                 }
                 self.session.addInput(input)
 
@@ -132,14 +139,16 @@ final class FaceCaptureViewController: UIViewController {
                 ]
                 video.setSampleBufferDelegate(self, queue: self.analysisQueue)
                 guard self.session.canAddOutput(video) else {
-                    throw MlKitSuiteError.cameraUnavailable("Unable to configure camera analysis.", true)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("camera_analysis_config_failed"), true)
                 }
                 self.session.addOutput(video)
                 self.videoOutput = video
 
                 let photo = AVCapturePhotoOutput()
                 guard self.session.canAddOutput(photo) else {
-                    throw MlKitSuiteError.cameraUnavailable("Unable to configure photo capture.", true)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("photo_capture_config_failed"), true)
                 }
                 self.session.addOutput(photo)
                 photo.isHighResolutionCaptureEnabled = true
@@ -159,7 +168,9 @@ final class FaceCaptureViewController: UIViewController {
                 self.session.commitConfiguration()
                 DispatchQueue.main.async {
                     self.fail(.cameraUnavailable(
-                        "Unable to start the front camera: \(error.localizedDescription)", true
+                        self.options.localization.format(
+                            "front_camera_start_failed", error.localizedDescription
+                        ), true
                     ))
                 }
             }
@@ -277,7 +288,8 @@ final class FaceCaptureViewController: UIViewController {
         capturing = true
         var capturingAnalysis = analysis
         capturingAnalysis.state = .capturing
-        overlayView.update(capturingAnalysis, message: "Capturing — hold still")
+        overlayView.update(capturingAnalysis,
+                           message: options.localization.text("face_capturing"))
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             self?.capturePhoto()
         }
@@ -303,7 +315,8 @@ final class FaceCaptureViewController: UIViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
             guard let self = self, !self.completed else { return }
             self.capturing = false
-            self.overlayView.update(nil, message: "Looking for a face")
+            self.overlayView.update(nil,
+                                    message: self.options.localization.text("face_searching"))
         }
     }
 
@@ -317,7 +330,8 @@ final class FaceCaptureViewController: UIViewController {
     private func scheduleTimeout() {
         guard options.timeoutMs > 0 else { return }
         let item = DispatchWorkItem { [weak self] in
-            self?.fail(.timeout("No acceptable face photo was captured before the timeout."))
+            guard let self = self else { return }
+            self.fail(.timeout(self.options.localization.text("face_timeout")))
         }
         timeoutItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(options.timeoutMs) / 1000, execute: item)
@@ -346,19 +360,19 @@ final class FaceCaptureViewController: UIViewController {
 
     private func message(for state: FaceCaptureState) -> String {
         switch state {
-        case .searching: return "Place your face inside the oval"
-        case .multipleFaces: return "Only one person should be visible"
-        case .moveCloser: return "Move closer"
-        case .moveAway: return "Move farther away"
-        case .centerFace: return "Center your face"
-        case .lookStraight: return "Look straight at the camera"
-        case .openEyes: return "Keep both eyes open"
-        case .neutralExpression: return "Use a neutral expression"
-        case .improveLighting: return "Move to a brighter place"
-        case .reduceLighting: return "Reduce direct light"
-        case .holdStill: return "Hold still"
-        case .ready: return "Ready"
-        case .capturing: return "Capturing — hold still"
+        case .searching: return options.localization.text("face_instruction")
+        case .multipleFaces: return options.localization.text("face_multiple")
+        case .moveCloser: return options.localization.text("face_move_closer")
+        case .moveAway: return options.localization.text("face_move_away")
+        case .centerFace: return options.localization.text("face_center")
+        case .lookStraight: return options.localization.text("face_look_straight")
+        case .openEyes: return options.localization.text("face_open_eyes")
+        case .neutralExpression: return options.localization.text("face_neutral")
+        case .improveLighting: return options.localization.text("face_more_light")
+        case .reduceLighting: return options.localization.text("face_less_light")
+        case .holdStill: return options.localization.text("face_hold_still")
+        case .ready: return options.localization.text("face_ready")
+        case .capturing: return options.localization.text("face_capturing")
         }
     }
 
@@ -418,11 +432,17 @@ extension FaceCaptureViewController: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto,
                      error: Error?) {
         if let error = error {
-            DispatchQueue.main.async { self.retry("Unable to capture the photo: \(error.localizedDescription)") }
+            DispatchQueue.main.async {
+                self.retry(self.options.localization.format(
+                    "face_capture_failed_detail", error.localizedDescription
+                ))
+            }
             return
         }
         guard let data = photo.fileDataRepresentation() else {
-            DispatchQueue.main.async { self.retry("The camera did not return a photo.") }
+            DispatchQueue.main.async {
+                self.retry(self.options.localization.text("face_no_photo"))
+            }
             return
         }
         processingQueue.async { [weak self] in
@@ -440,7 +460,9 @@ extension FaceCaptureViewController: AVCapturePhotoCaptureDelegate {
                             }
                         case .failure(let error):
                             self.fail(.processingFailed(
-                                "Unable to process the captured photo: \(error.localizedDescription)", true
+                                self.options.localization.format(
+                                    "face_process_failed", error.localizedDescription
+                                ), true
                             ))
                         }
                     }
@@ -448,7 +470,9 @@ extension FaceCaptureViewController: AVCapturePhotoCaptureDelegate {
             } catch {
                 DispatchQueue.main.async {
                     self.fail(.processingFailed(
-                        "Unable to prepare the captured photo: \(error.localizedDescription)", false
+                        self.options.localization.format(
+                            "face_prepare_failed", error.localizedDescription
+                        ), false
                     ))
                 }
             }

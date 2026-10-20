@@ -3,12 +3,13 @@ import UIKit
 final class BarcodeOverlayView: UIView {
     private let instruction: String
     private let guideColor: UIColor?
-    private var message = "Looking for a barcode"
+    private var message: String
     private var candidateVisible = false
 
-    init(instruction: String, guideColor: UIColor?) {
+    init(instruction: String, guideColor: UIColor?, initialMessage: String) {
         self.instruction = instruction
         self.guideColor = guideColor
+        self.message = initialMessage
         super.init(frame: .zero)
         backgroundColor = .clear
         isOpaque = false

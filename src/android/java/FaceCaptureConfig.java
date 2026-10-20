@@ -1,5 +1,7 @@
 package com.andreszs.plugins.mlkitsuite;
 
+import android.content.Context;
+
 import org.json.JSONObject;
 
 final class FaceCaptureConfig {
@@ -12,6 +14,7 @@ final class FaceCaptureConfig {
     final boolean showCloseButton;
     final boolean debugMode;
     final String instructionText;
+    final MlKitLocalization localization;
     final long timeoutMs;
     final Checks checks;
 
@@ -22,6 +25,7 @@ final class FaceCaptureConfig {
         boolean showCloseButton,
         boolean debugMode,
         String instructionText,
+        MlKitLocalization localization,
         long timeoutMs,
         Checks checks
     ) {
@@ -31,21 +35,24 @@ final class FaceCaptureConfig {
         this.showCloseButton = showCloseButton;
         this.debugMode = debugMode;
         this.instructionText = instructionText;
+        this.localization = localization;
         this.timeoutMs = timeoutMs;
         this.checks = checks;
     }
 
-    static FaceCaptureConfig fromJson(JSONObject options) {
+    static FaceCaptureConfig fromJson(Context context, JSONObject options) {
         if (options == null) {
             options = new JSONObject();
         }
+        MlKitLocalization localization = MlKitLocalization.from(context, options);
         rejectUnknown(options);
         int width = strictInteger(options, "outputWidth", 600, MIN_OUTPUT_SIZE, MAX_OUTPUT_SIZE);
         int height = strictInteger(options, "outputHeight", 720, MIN_OUTPUT_SIZE, MAX_OUTPUT_SIZE);
         int quality = strictInteger(options, "jpegQuality", 95, 50, 100);
         boolean close = strictBoolean(options, "showCloseButton", true);
         boolean debug = strictBoolean(options, "debugMode", false);
-        String instruction = strictString(options, "instructionText", "Place your face inside the oval");
+        String instruction = strictString(options, "instructionText",
+            localization.text("face_instruction"));
         long timeout = strictLong(options, "timeoutMs", 0L, 0L, 600000L);
         JSONObject rawChecks = null;
         if (options.has("checks") && !options.isNull("checks")) {
@@ -55,8 +62,8 @@ final class FaceCaptureConfig {
             }
             rawChecks = (JSONObject) value;
         }
-        return new FaceCaptureConfig(width, height, quality, close, debug, instruction, timeout,
-            Checks.fromJson(rawChecks));
+        return new FaceCaptureConfig(width, height, quality, close, debug, instruction,
+            localization, timeout, Checks.fromJson(rawChecks));
     }
 
     private static void rejectUnknown(JSONObject options) {
@@ -67,7 +74,7 @@ final class FaceCaptureConfig {
                 || "jpegQuality".equals(key) || "showCloseButton".equals(key)
                 || "debugMode".equals(key) || "instructionText".equals(key)
                 || "timeoutMs".equals(key) || "checks".equals(key)
-                || "moduleLoadingMessage".equals(key))) {
+                || "moduleLoadingMessage".equals(key) || "locale".equals(key))) {
                 throw new IllegalArgumentException("Unknown face capture option: " + key + ".");
             }
         }

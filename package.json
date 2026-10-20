@@ -54,7 +54,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node tests/js-api.test.js && node tests/java-confirmation.test.js && node tests/ios-live-barcode.test.js"
+    "test": "node tests/js-api.test.js && node tests/java-confirmation.test.js && node tests/ios-live-barcode.test.js && node tests/localization.test.js"
   }
 }
 

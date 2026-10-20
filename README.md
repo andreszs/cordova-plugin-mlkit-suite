@@ -15,6 +15,7 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
   - [iOS setup](#ios-setup)
 - [Android model delivery](#android-model-delivery)
   - [Bundled vs unbundled](#bundled-vs-unbundled)
+- [Localization](#localization)
 - [API overview](#api-overview)
 - [Capabilities](#capabilities)
 - [Document scanning](#document-scanning)
@@ -174,7 +175,7 @@ The plugin modes choose when each implementation becomes available:
 
 For `install-time`, the plugin adds the selected modules to the generated Android manifest so Google Play can request them after installation. This is best effort and may still be incomplete at first use, especially for a sideloaded APK. `first-use` skips that request and downloads a module when its API is first called. Google Play services can update managed models independently, but not the Java client libraries selected at build time.
 
-When an unbundled module is missing, the plugin shows a native spinner, waits for the download, and then continues the requested operation. Its default text is `Loading Google Play services module...`; set `moduleLoadingMessage` to localized text, or to an empty string for a spinner without a label:
+When an unbundled module is missing, the plugin shows a native spinner, waits for the download, and then continues the requested operation. Its default text follows the resolved plugin locale; set `moduleLoadingMessage` to custom text, or to an empty string for a spinner without a label:
 
 ```javascript
 await MlKit.recognizeText(imagePath, {
@@ -191,6 +192,21 @@ await MlKit.prepareModels(["barcode", "ocr"], {
 ```
 
 `MlKit.getCapabilities()` reports each module's configured mode and readiness without starting a download. Document Scanner is separate: it is always delivered through Google Play services and can be prepared with `MlKit.prepareDocumentScanner()`.
+
+## Localization
+
+Plugin-owned camera instructions, accessibility labels, loading text, and user-facing native errors are available in English and Spanish. Every options object accepts an optional `locale`:
+
+```javascript
+await MlKit.face.capture({ locale: "es-AR" });
+await MlKit.barcode.scan({ locale: "auto" });
+```
+
+`auto` is the default and uses the application/device language resolved natively at runtime. `en`, `es`, and BCP-47 tags such as `en-US` or `es-AR` are accepted; unsupported languages safely fall back to English. Explicit `instructionText` and `moduleLoadingMessage` values always take precedence, including an empty string.
+
+Android translations live in `src/android/res/values*/mlkit_suite_strings.xml`; iOS translations live in `src/ios/MlKitSuiteResources.bundle/*.lproj/Localizable.strings`. Add the same keys in a new platform locale directory to extend the plugin. Stable result values and error codes are never translated.
+
+The Google Document Scanner UI is owned by Google Play services and follows the locale selected by that component. Its public API has no locale override, so `locale` controls the plugin's loading and error messages around the flow but cannot force the language of Google's scanner screens.
 
 ## API overview
 
@@ -219,7 +235,7 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 }
 ```
 
-The result describes `face`, `barcode`, `document`, and `text`. On Android, each affected module reports `mode` (`bundled`, `install-time`, or `first-use`) and `bundled`. It also performs a read-only Google Play services availability check and reports `ready` plus `modelStatus` (`bundled`, `downloaded`, `not-ready`, `unsupported`, or `unknown`) without requesting a download. Root delivery fields can report `mixed`. `offline` remains `false` because the document scanner is always dynamically delivered.
+The result describes `face`, `barcode`, `document`, and `text`. Its `localization` object reports the supported, device, and currently resolved locales. On Android, each affected module reports `mode` (`bundled`, `install-time`, or `first-use`) and `bundled`. It also performs a read-only Google Play services availability check and reports `ready` plus `modelStatus` (`bundled`, `downloaded`, `not-ready`, `unsupported`, or `unknown`) without requesting a download. Root delivery fields can report `mixed`. `offline` remains `false` because the document scanner is always dynamically delivered.
 
 ## Document scanning
 
@@ -258,7 +274,8 @@ The method performs device checks before requesting the Google scanner. Android 
 | `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
 | `resultFormats` | `string[] \| string` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `JPG` aliases `JPEG`. |
 | `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL"` | `"FULL"` | Selects the native editing feature set. `BASE` still includes crop, rotation, page removal, and page reordering. |
-| `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading the scanner component. Empty string shows only the spinner. |
+| `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading the scanner component. Empty string shows only the spinner. |
+| `locale` | `string` | `"auto"` | Plugin loading/error locale. Google's scanner UI resolves its own locale. |
 
 Unknown options, invalid types, empty result formats, and out-of-range values reject with `INVALID_ARGUMENT`.
 
@@ -370,7 +387,8 @@ Both barcode methods support all 13 formats exposed by ML Kit Barcode Scanning:
 | `showTorchButton` | `boolean` | `true` | Shows a torch toggle when the rear camera has flash hardware. |
 | `instructionText` | `string \| null` | `"Place a barcode inside the frame"` | Text shown above the guide. An empty string hides it. |
 | `guideColor` | `string \| null` | `null` | Optional `#RRGGBB` color for all four guide corners. When omitted, the default blue, yellow, green, and red corners are used. A detected in-guide barcode always changes them to green. |
-| `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading Barcode Scanning. Empty string shows only the spinner. |
+| `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading Barcode Scanning. Empty string shows only the spinner. |
+| `locale` | `string` | `"auto"` | Plugin UI/error locale (`en`, `es`, or BCP-47). |
 | `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
 ## Face capture
@@ -413,7 +431,8 @@ Capture starts automatically only after all enabled checks remain acceptable for
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. |
 | `debugMode` | `boolean` | `false` | Shows face bounds and live quality values without weakening validation. |
 | `instructionText` | `string \| null` | `"Place your face inside the oval"` | Text shown above the guide. An empty string hides it. |
-| `moduleLoadingMessage` | `string \| null` | `"Loading Google Play services module..."` | Localizable Android text shown only while downloading Face Detection. Empty string shows only the spinner. |
+| `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading Face Detection. Empty string shows only the spinner. |
+| `locale` | `string` | `"auto"` | Plugin UI/error locale (`en`, `es`, or BCP-47). |
 | `checks` | `object \| null` | all enabled | Enables or disables individual capture gates. |
 | `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
@@ -527,7 +546,7 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 
 ## Tests
 
-Run the JavaScript, Java confirmation, and iOS source-contract tests:
+Run the JavaScript, Java confirmation, iOS source-contract, and localization-resource tests:
 
 ```bash
 npm test
@@ -547,3 +566,4 @@ Before release, validate installation and a debug build with each supported Cord
 - Added guided front-camera face capture with configurable quality checks, final-still validation, exact output sizing, and cache URLs.
 - Kept document and barcode payload handling generic and country-agnostic.
 - Added strict option validation, structured errors, privacy metadata, and contract tests.
+- Added native runtime localization with automatic locale resolution, per-call overrides, and English/Spanish resources.

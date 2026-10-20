@@ -29,14 +29,14 @@ Promise.resolve()
     .then(function () { return MlKit.prepareModels(); })
     .then(function () {
         return MlKit.prepareModels(['barcode', 'ocr'], {
-            moduleLoadingMessage: 'Cargando módulos…'
+            moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR'
         });
     })
     .then(function () {
-        return MlKit.face.capture({ timeoutMs: 1000, moduleLoadingMessage: '' });
+        return MlKit.face.capture({ timeoutMs: 1000, moduleLoadingMessage: '', locale: 'es' });
     })
     .then(function () {
-        return MlKit.barcode.scan({ formats: ['PDF_417', 'QR_CODE'] });
+        return MlKit.barcode.scan({ formats: ['PDF_417', 'QR_CODE'], locale: 'auto' });
     })
     .then(function () {
         return MlKit.prepareDocumentScanner({ moduleLoadingMessage: 'Preparing scanner…' });
@@ -101,12 +101,14 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [
-                ['barcode', 'ocr'], { moduleLoadingMessage: 'Cargando módulos…' }
+                ['barcode', 'ocr'], { moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR' }
             ] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{
-                timeoutMs: 1000, moduleLoadingMessage: ''
+                timeoutMs: 1000, moduleLoadingMessage: '', locale: 'es'
             }] },
-            { service: 'MlKitSuite', action: 'barcodeScan', args: [{ formats: ['PDF_417', 'QR_CODE'] }] },
+            { service: 'MlKitSuite', action: 'barcodeScan', args: [{
+                formats: ['PDF_417', 'QR_CODE'], locale: 'auto'
+            }] },
             { service: 'MlKitSuite', action: 'prepareDocumentScanner', args: [{
                 moduleLoadingMessage: 'Preparing scanner…'
             }] },

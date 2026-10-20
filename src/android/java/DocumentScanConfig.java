@@ -1,5 +1,7 @@
 package com.andreszs.plugins.mlkitsuite;
 
+import android.content.Context;
+
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions;
 
 import org.json.JSONArray;
@@ -15,23 +17,27 @@ final class DocumentScanConfig {
     final boolean galleryImportAllowed;
     final int[] resultFormats;
     final int scannerMode;
+    final MlKitLocalization localization;
 
     private DocumentScanConfig(int pageLimit, boolean galleryImportAllowed,
-                               int[] resultFormats, int scannerMode) {
+                               int[] resultFormats, int scannerMode,
+                               MlKitLocalization localization) {
         this.pageLimit = pageLimit;
         this.galleryImportAllowed = galleryImportAllowed;
         this.resultFormats = resultFormats;
         this.scannerMode = scannerMode;
+        this.localization = localization;
     }
 
-    static DocumentScanConfig fromJson(JSONObject options) {
+    static DocumentScanConfig fromJson(Context context, JSONObject options) {
         JSONObject value = options == null ? new JSONObject() : options;
+        MlKitLocalization localization = MlKitLocalization.from(context, value);
         rejectUnknown(value);
         int pageLimit = strictInteger(value, "pageLimit", 1, 1, 100);
         boolean gallery = strictBoolean(value, "galleryImportAllowed", true);
         int[] formats = parseResultFormats(value.opt("resultFormats"));
         int mode = parseScannerMode(value.opt("scannerMode"));
-        return new DocumentScanConfig(pageLimit, gallery, formats, mode);
+        return new DocumentScanConfig(pageLimit, gallery, formats, mode, localization);
     }
 
     GmsDocumentScannerOptions toNativeOptions() {
@@ -108,7 +114,7 @@ final class DocumentScanConfig {
             String key = keys.next();
             if (!("pageLimit".equals(key) || "galleryImportAllowed".equals(key)
                 || "resultFormats".equals(key) || "scannerMode".equals(key)
-                || "moduleLoadingMessage".equals(key))) {
+                || "moduleLoadingMessage".equals(key) || "locale".equals(key))) {
                 throw new IllegalArgumentException("Unknown document scan option: " + key + ".");
             }
         }

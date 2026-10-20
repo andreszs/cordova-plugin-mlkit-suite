@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mlkit_suite_loading_module">Cargando módulo de Google Play Services…</string>
+    <string name="mlkit_suite_close">Cerrar</string>
+    <string name="mlkit_suite_close_face">Cerrar captura facial</string>
+    <string name="mlkit_suite_close_barcode">Cerrar escáner de códigos</string>
+    <string name="mlkit_suite_turn_torch_on">Encender linterna</string>
+    <string name="mlkit_suite_turn_torch_off">Apagar linterna</string>
+
+    <string name="mlkit_suite_face_instruction">Colocá tu rostro dentro del óvalo</string>
+    <string name="mlkit_suite_face_searching">Buscando un rostro</string>
+    <string name="mlkit_suite_face_multiple">Solo debe verse una persona</string>
+    <string name="mlkit_suite_face_move_closer">Acercate</string>
+    <string name="mlkit_suite_face_move_away">Alejate</string>
+    <string name="mlkit_suite_face_center">Centrá tu rostro</string>
+    <string name="mlkit_suite_face_look_straight">Mirá de frente a la cámara</string>
+    <string name="mlkit_suite_face_open_eyes">Mantené ambos ojos abiertos</string>
+    <string name="mlkit_suite_face_neutral">Mantené una expresión neutral</string>
+    <string name="mlkit_suite_face_more_light">Buscá un lugar más iluminado</string>
+    <string name="mlkit_suite_face_less_light">Reducí la luz directa</string>
+    <string name="mlkit_suite_face_hold_still">Quedate quieto</string>
+    <string name="mlkit_suite_face_ready">Listo</string>
+    <string name="mlkit_suite_face_capturing">Capturando — quedate quieto</string>
+    <string name="mlkit_suite_face_analyze_failed">No se pudo analizar la imagen de la cámara</string>
+    <string name="mlkit_suite_face_capture_retry">No se pudo capturar la foto. Intentá nuevamente.</string>
+    <string name="mlkit_suite_face_not_found">No se encontró ningún rostro en la foto capturada.</string>
+    <string name="mlkit_suite_face_multiple_found">Se encontró más de un rostro en la foto capturada.</string>
+    <string name="mlkit_suite_face_too_dark">La foto capturada está demasiado oscura.</string>
+    <string name="mlkit_suite_face_too_bright">La foto capturada está demasiado iluminada.</string>
+    <string name="mlkit_suite_face_not_sharp">La foto capturada no tiene suficiente nitidez.</string>
+    <string name="mlkit_suite_face_move_closer_retry">Acercate a la cámara.</string>
+    <string name="mlkit_suite_face_center_retry">Centrá tu rostro e intentá nuevamente.</string>
+    <string name="mlkit_suite_face_look_straight_retry">Mirá de frente a la cámara.</string>
+    <string name="mlkit_suite_face_open_eyes_retry">Mantené ambos ojos abiertos.</string>
+    <string name="mlkit_suite_face_neutral_retry">Mantené una expresión neutral.</string>
+    <string name="mlkit_suite_face_timeout">No se capturó una foto facial válida antes de agotar el tiempo.</string>
+    <string name="mlkit_suite_face_cancelled">El usuario canceló la captura facial.</string>
+    <string name="mlkit_suite_front_camera_missing">No hay una cámara frontal disponible.</string>
+    <string name="mlkit_suite_front_camera_start_failed">No se pudo iniciar la cámara frontal: %1$s</string>
+    <string name="mlkit_suite_face_process_failed">No se pudo procesar la foto capturada: %1$s</string>
+
+    <string name="mlkit_suite_barcode_instruction">Colocá un código dentro del recuadro</string>
+    <string name="mlkit_suite_barcode_searching">Buscando un código</string>
+    <string name="mlkit_suite_barcode_center">Centrá el código dentro del recuadro</string>
+    <string name="mlkit_suite_barcode_detected">%1$s detectado — mantené firme (%2$d/%3$d)</string>
+    <string name="mlkit_suite_barcode_analyze_failed">No se pudo analizar la imagen de la cámara</string>
+    <string name="mlkit_suite_barcode_timeout">No se confirmó ningún código antes de agotar el tiempo.</string>
+    <string name="mlkit_suite_barcode_cancelled">El usuario canceló el escaneo de códigos.</string>
+    <string name="mlkit_suite_rear_camera_missing">No hay una cámara trasera disponible.</string>
+    <string name="mlkit_suite_rear_camera_start_failed">No se pudo iniciar la cámara trasera: %1$s</string>
+
+    <string name="mlkit_suite_document_cancelled">El usuario canceló el escaneo del documento.</string>
+    <string name="mlkit_suite_document_unsupported">El escáner de documentos de ML Kit no es compatible con este dispositivo.</string>
+    <string name="mlkit_suite_document_requirements">El escáner de documentos de ML Kit requiere Android 7.0 o posterior y al menos 1,7 GB de RAM total.</string>
+    <string name="mlkit_suite_document_initialize_failed">No se pudo inicializar el escáner de documentos.</string>
+    <string name="mlkit_suite_document_open_failed">No se pudo abrir el escáner de documentos.</string>
+    <string name="mlkit_suite_document_unavailable">El escáner de documentos de ML Kit no está disponible.</string>
+    <string name="mlkit_suite_document_persist_failed">No se pudo guardar el documento escaneado.</string>
+    <string name="mlkit_suite_document_check_failed">No se pudo verificar el componente del escáner de documentos.</string>
+    <string name="mlkit_suite_document_download_cancelled">Se canceló la descarga del componente del escáner de documentos.</string>
+    <string name="mlkit_suite_document_download_failed">No se pudo descargar el componente del escáner de documentos (%1$s).</string>
+    <string name="mlkit_suite_document_download_start_failed">No se pudo iniciar la descarga del componente del escáner de documentos.</string>
+
+    <string name="mlkit_suite_models_check_failed">No se pudieron verificar los módulos de modelos de ML Kit.</string>
+    <string name="mlkit_suite_models_download_cancelled">Se canceló la descarga de los modelos de ML Kit.</string>
+    <string name="mlkit_suite_models_download_failed">No se pudieron descargar los módulos de modelos de ML Kit (%1$s).</string>
+    <string name="mlkit_suite_models_download_start_failed">No se pudo iniciar la descarga de los modelos de ML Kit.</string>
+    <string name="mlkit_suite_image_open_failed">No se pudo abrir imagePath.</string>
+    <string name="mlkit_suite_text_recognition_failed">No se pudo reconocer texto en la imagen.</string>
+    <string name="mlkit_suite_barcode_image_failed">No se pudieron detectar códigos en la imagen.</string>
+    <string name="mlkit_suite_camera_permission_denied">Se denegó el permiso de cámara.</string>
+    <string name="mlkit_suite_busy">Ya hay otra sesión interactiva de ML Kit activa.</string>
+</resources>

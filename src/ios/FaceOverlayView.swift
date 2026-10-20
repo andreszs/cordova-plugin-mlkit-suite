@@ -4,11 +4,12 @@ final class FaceOverlayView: UIView {
     private let instruction: String
     private let debugMode: Bool
     private var analysis: FaceCaptureAnalysis?
-    private var message = "Looking for a face"
+    private var message: String
 
-    init(instruction: String, debugMode: Bool) {
+    init(instruction: String, debugMode: Bool, initialMessage: String) {
         self.instruction = instruction
         self.debugMode = debugMode
+        self.message = initialMessage
         super.init(frame: .zero)
         backgroundColor = .clear
         isOpaque = false

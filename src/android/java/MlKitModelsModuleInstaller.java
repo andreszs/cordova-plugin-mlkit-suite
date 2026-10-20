@@ -95,7 +95,8 @@ final class MlKitModelsModuleInstaller {
     }
 
     static void prepare(Activity activity, boolean includeFace, boolean includeBarcode,
-                        boolean includeText, String loadingMessage, Callback callback) {
+                        boolean includeText, String loadingMessage,
+                        MlKitLocalization localization, Callback callback) {
         final FaceDetector face = includeFace
             ? FaceDetection.getClient(new FaceDetectorOptions.Builder().build()) : null;
         final BarcodeScanner barcode = includeBarcode ? BarcodeScanning.getClient() : null;
@@ -118,14 +119,15 @@ final class MlKitModelsModuleInstaller {
                         activity, loadingMessage
                     );
                     loadingDialog.show();
-                    install(client, modules, face, barcode, text, loadingDialog, callback);
+                    install(client, modules, face, barcode, text, loadingDialog,
+                        localization, callback);
                 }
             })
             .addOnFailureListener(error -> {
                 close(face, barcode, text);
                 callback.onError(MlKitSuitePlugin.error(
                     "MODULE_DOWNLOAD_FAILED",
-                    "Unable to check the ML Kit model modules.",
+                    localization.text("models_check_failed"),
                     true
                 ));
             });
@@ -133,7 +135,8 @@ final class MlKitModelsModuleInstaller {
 
     private static void install(ModuleInstallClient client, OptionalModuleApi[] modules,
                                 FaceDetector face, BarcodeScanner barcode, TextRecognizer text,
-                                MlKitLoadingDialog loadingDialog, Callback callback) {
+                                MlKitLoadingDialog loadingDialog,
+                                MlKitLocalization localization, Callback callback) {
         AtomicBoolean finished = new AtomicBoolean(false);
         InstallStatusListener[] listenerHolder = new InstallStatusListener[1];
         listenerHolder[0] = update -> {
@@ -144,13 +147,14 @@ final class MlKitModelsModuleInstaller {
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_CANCELED) {
                 finishError(client, listenerHolder[0], face, barcode, text, loadingDialog,
                     callback, finished,
-                    "MODULE_DOWNLOAD_CANCELLED", "ML Kit model download was cancelled.");
+                    "MODULE_DOWNLOAD_CANCELLED",
+                    localization.text("models_download_cancelled"));
             } else if (state == ModuleInstallStatusUpdate.InstallState.STATE_FAILED) {
                 String status = ModuleInstallStatusCodes.getStatusCodeString(update.getErrorCode());
                 finishError(client, listenerHolder[0], face, barcode, text, loadingDialog,
                     callback, finished,
                     "MODULE_DOWNLOAD_FAILED",
-                    "Unable to download the ML Kit model modules (" + status + ").");
+                    localization.format("models_download_failed", status));
             }
         };
 
@@ -166,7 +170,7 @@ final class MlKitModelsModuleInstaller {
             })
             .addOnFailureListener(error -> finishError(
                 client, listenerHolder[0], face, barcode, text, loadingDialog, callback, finished,
-                "MODULE_DOWNLOAD_FAILED", "Unable to start the ML Kit model download."
+                "MODULE_DOWNLOAD_FAILED", localization.text("models_download_start_failed")
             ));
     }
 

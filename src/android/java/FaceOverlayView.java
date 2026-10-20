@@ -13,19 +13,24 @@ final class FaceOverlayView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF guide = new RectF();
     private FaceCaptureModels.Analysis analysis;
-    private String message = "Looking for a face";
+    private String message;
     private final String instruction;
     private final boolean debugMode;
 
-    FaceOverlayView(Context context, String instruction, boolean debugMode) {
+    FaceOverlayView(Context context, String instruction, boolean debugMode,
+                    String initialMessage) {
         super(context);
         this.instruction = instruction;
         this.debugMode = debugMode;
+        this.message = initialMessage;
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
     }
 
     FaceOverlayView(Context context, AttributeSet attrs) {
-        this(context, "Place your face inside the oval", false);
+        this(context,
+            MlKitLocalization.from(context, (Object) null).text("face_instruction"),
+            false,
+            MlKitLocalization.from(context, (Object) null).text("face_searching"));
     }
 
     void update(FaceCaptureModels.Analysis value, String text) {

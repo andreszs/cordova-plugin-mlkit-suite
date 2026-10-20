@@ -89,14 +89,16 @@ struct FaceCaptureOptions {
     let showCloseButton: Bool
     let debugMode: Bool
     let instructionText: String
+    let localization: MlKitLocalization
     let timeoutMs: Int
     let checks: FaceCaptureChecks
 
     init(dictionary: [String: Any]) throws {
+        localization = try MlKitLocalization(dictionary: dictionary)
         let known = Set([
             "outputWidth", "outputHeight", "jpegQuality", "showCloseButton",
             "debugMode", "instructionText", "timeoutMs", "checks",
-            "moduleLoadingMessage"
+            "moduleLoadingMessage", "locale"
         ])
         for key in dictionary.keys where !known.contains(key) {
             throw MlKitSuiteError.invalidArgument("Unknown face capture option: \(key).")
@@ -138,7 +140,7 @@ struct FaceCaptureOptions {
             }
             instructionText = string.trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
-            instructionText = "Place your face inside the oval"
+            instructionText = localization.text("face_instruction")
         }
         if let raw = dictionary["checks"], !(raw is NSNull) {
             guard let checks = raw as? [String: Any] else {

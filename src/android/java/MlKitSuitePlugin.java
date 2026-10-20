@@ -30,8 +30,6 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     private static final int BARCODE_SCAN_REQUEST = 8613;
     private static final int DOCUMENT_SCAN_REQUEST = 8614;
     private static final long DOCUMENT_SCANNER_MINIMUM_MEMORY_BYTES = 1_700_000_000L;
-    private static final String DEFAULT_MODULE_LOADING_MESSAGE =
-        "Loading Google Play services module...";
     private static final String FACE_MODE_METADATA =
         "com.andreszs.plugins.mlkitsuite.FACE_MODE";
     private static final String BARCODE_MODE_METADATA =
@@ -70,7 +68,14 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return false;
         }
         if (pendingCallback != null) {
-            callbackContext.error(error("BUSY", "Another interactive ML Kit session is already active.", true));
+            try {
+                MlKitLocalization localization = MlKitLocalization.from(
+                    cordova.getActivity(), args.optJSONObject(0));
+                callbackContext.error(error("BUSY", localization.text("busy"), true));
+            } catch (IllegalArgumentException exception) {
+                callbackContext.error(error(
+                    "INVALID_ARGUMENT", exception.getMessage(), false));
+            }
             return true;
         }
 
@@ -79,11 +84,11 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         final String loadingMessage;
         try {
             if ("faceCapture".equals(action)) {
-                FaceCaptureConfig.fromJson(options);
+                FaceCaptureConfig.fromJson(cordova.getActivity(), options);
             } else if ("barcodeScan".equals(action)) {
-                BarcodeScanConfig.fromJson(options);
+                BarcodeScanConfig.fromJson(cordova.getActivity(), options);
             } else {
-                DocumentScanConfig.fromJson(options);
+                DocumentScanConfig.fromJson(cordova.getActivity(), options);
             }
             loadingMessage = moduleLoadingMessage(options);
         } catch (IllegalArgumentException exception) {
@@ -98,7 +103,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !documentScannerDeviceSupported()) {
                 finishWithError(
                     "UNSUPPORTED_DEVICE",
-                    "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
+                    localization(options).text("document_requirements"),
                     false
                 );
                 return true;
@@ -154,7 +159,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 finishWithError("INVALID_ARGUMENT", exception.getMessage(), false);
             }
         } else {
-            finishWithError("CAMERA_PERMISSION_DENIED", "Camera permission was denied.", true);
+            finishWithError("CAMERA_PERMISSION_DENIED",
+                localization(pendingOptions).text("camera_permission_denied"), true);
         }
     }
 
@@ -182,11 +188,12 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
 
         String code = "USER_CANCELLED";
+        MlKitLocalization localization = localization(pendingOptions);
         String message = requestCode == FACE_CAPTURE_REQUEST
-            ? "Face capture was cancelled by the user."
+            ? localization.text("face_cancelled")
             : requestCode == BARCODE_SCAN_REQUEST
-                ? "Barcode scanning was cancelled by the user."
-                : "Document scanning was cancelled by the user.";
+                ? localization.text("barcode_cancelled")
+                : localization.text("document_cancelled");
         boolean recoverable = true;
         if (intent != null) {
             String errorCode;
@@ -257,6 +264,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject barcode = new JSONObject();
         JSONObject document = new JSONObject();
         JSONObject text = new JSONObject();
+        JSONObject localization = new JSONObject();
         String faceMode = androidModuleMode(FACE_MODE_METADATA);
         String barcodeMode = androidModuleMode(BARCODE_MODE_METADATA);
         String ocrMode = androidModuleMode(OCR_MODE_METADATA);
@@ -267,6 +275,14 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             root.put("offline", false);
             root.put("modelDelivery", modelDelivery);
             root.put("modelDownloadStrategy", modelDownloadStrategy);
+            root.put("localization", localization);
+            localization.put("default", "auto");
+            localization.put("supportedLocales", new JSONArray().put("en").put("es"));
+            Locale deviceLocale = cordova.getActivity().getResources()
+                .getConfiguration().getLocales().get(0);
+            localization.put("deviceLocale", deviceLocale.toLanguageTag());
+            localization.put("resolvedLocale",
+                MlKitLocalization.from(cordova.getActivity(), (Object) null).locale());
             root.put("face", face);
             face.put("capture", true);
             face.put("frontCamera", true);
@@ -397,17 +413,21 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
 
     private void processText(JSONArray args, CallbackContext callbackContext) {
         String imagePath = args.optString(0, "").trim();
-        if (imagePath.isEmpty()) {
-            callbackContext.error(error("INVALID_ARGUMENT", "imagePath must be a non-empty string.", false));
-            return;
-        }
         try {
             JSONObject options = optionsAt(args, 1, "options");
+            MlKitLocalization localization = localization(options);
+            if (imagePath.isEmpty()) {
+                callbackContext.error(error("INVALID_ARGUMENT",
+                    "imagePath must be a non-empty string.", false));
+                return;
+            }
             String loadingMessage = moduleLoadingMessage(options);
-            ensureModelsAvailable(false, false, true, loadingMessage, callbackContext, () -> {
+            ensureModelsAvailable(false, false, true, loadingMessage, localization,
+                callbackContext, () -> {
                 File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
                 cordova.getThreadPool().execute(() -> StaticImageProcessor.recognizeText(
-                    cordova.getActivity().getApplicationContext(), imagePath, cache, callbackContext
+                    cordova.getActivity().getApplicationContext(), imagePath, cache,
+                    localization, callbackContext
                 ));
             });
         } catch (IllegalArgumentException exception) {
@@ -416,18 +436,22 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     }
 
     private void prepareDocumentScanner(JSONArray args, CallbackContext callbackContext) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !documentScannerDeviceSupported()) {
-            callbackContext.error(error(
-                "UNSUPPORTED_DEVICE",
-                "ML Kit Document Scanner requires Android 7.0 or newer and at least 1.7 GB of total RAM.",
-                false
-            ));
-            return;
-        }
         try {
-            String loadingMessage = moduleLoadingMessage(optionsAt(args, 0, "options"));
+            JSONObject options = optionsAt(args, 0, "options");
+            MlKitLocalization localization = localization(options);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N
+                || !documentScannerDeviceSupported()) {
+                callbackContext.error(error(
+                    "UNSUPPORTED_DEVICE",
+                    localization.text("document_requirements"),
+                    false
+                ));
+                return;
+            }
+            String loadingMessage = moduleLoadingMessage(options);
             cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
-                cordova.getActivity(), loadingMessage, new DocumentScannerModuleInstaller.Callback() {
+                cordova.getActivity(), loadingMessage, localization,
+                new DocumentScannerModuleInstaller.Callback() {
                     @Override
                     public void onReady(JSONObject result) {
                         callbackContext.success(result);
@@ -447,9 +471,12 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     private void prepareModels(JSONArray args, CallbackContext callbackContext) {
         final Set<String> requestedModules;
         final String loadingMessage;
+        final MlKitLocalization localization;
         try {
             requestedModules = requestedModules(args);
-            loadingMessage = moduleLoadingMessage(optionsAt(args, 1, "options"));
+            JSONObject options = optionsAt(args, 1, "options");
+            localization = localization(options);
+            loadingMessage = moduleLoadingMessage(options);
         } catch (IllegalArgumentException exception) {
             callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
             return;
@@ -472,6 +499,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
         cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
             cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, loadingMessage,
+            localization,
             new MlKitModelsModuleInstaller.Callback() {
                 @Override
                 public void onReady(JSONObject result) {
@@ -532,19 +560,22 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
 
     private void processBarcodes(JSONArray args, CallbackContext callbackContext) {
         String imagePath = args.optString(0, "").trim();
-        if (imagePath.isEmpty()) {
-            callbackContext.error(error("INVALID_ARGUMENT", "imagePath must be a non-empty string.", false));
-            return;
-        }
         try {
             JSONObject options = optionsAt(args, 1, "options");
+            MlKitLocalization localization = localization(options);
+            if (imagePath.isEmpty()) {
+                callbackContext.error(error("INVALID_ARGUMENT",
+                    "imagePath must be a non-empty string.", false));
+                return;
+            }
             int[] formats = BarcodeScanConfig.imageFormatValuesFromJson(options);
             String loadingMessage = moduleLoadingMessage(options);
-            ensureModelsAvailable(false, true, false, loadingMessage, callbackContext, () -> {
+            ensureModelsAvailable(false, true, false, loadingMessage, localization,
+                callbackContext, () -> {
                 File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
                 cordova.getThreadPool().execute(() -> StaticImageProcessor.scanBarcodes(
                     cordova.getActivity().getApplicationContext(), imagePath, cache, formats,
-                    callbackContext
+                    localization, callbackContext
                 ));
             });
         } catch (IllegalArgumentException exception) {
@@ -554,7 +585,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
 
     private void preparePendingCameraModule(String loadingMessage, CallbackContext owner) {
         boolean face = "faceCapture".equals(pendingAction);
-        ensureModelsAvailable(face, !face, false, loadingMessage, owner, () -> {
+        ensureModelsAvailable(face, !face, false, loadingMessage,
+            localization(pendingOptions), owner, () -> {
             if (pendingCallback != owner) return;
             launchPendingActivity();
         }, () -> {
@@ -564,7 +596,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
 
     private void preparePendingDocumentScanner(String loadingMessage, CallbackContext owner) {
         cordova.getActivity().runOnUiThread(() -> DocumentScannerModuleInstaller.prepare(
-            cordova.getActivity(), loadingMessage, new DocumentScannerModuleInstaller.Callback() {
+            cordova.getActivity(), loadingMessage, localization(pendingOptions),
+            new DocumentScannerModuleInstaller.Callback() {
                 @Override
                 public void onReady(JSONObject result) {
                     if (pendingCallback == owner) launchPendingActivity();
@@ -581,15 +614,17 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     }
 
     private void ensureModelsAvailable(boolean face, boolean barcode, boolean ocr,
-                                       String loadingMessage, CallbackContext callbackContext,
+                                       String loadingMessage, MlKitLocalization localization,
+                                       CallbackContext callbackContext,
                                        Runnable onReady) {
         ensureModelsAvailable(
-            face, barcode, ocr, loadingMessage, callbackContext, onReady, null
+            face, barcode, ocr, loadingMessage, localization, callbackContext, onReady, null
         );
     }
 
     private void ensureModelsAvailable(boolean face, boolean barcode, boolean ocr,
-                                       String loadingMessage, CallbackContext callbackContext,
+                                       String loadingMessage, MlKitLocalization localization,
+                                       CallbackContext callbackContext,
                                        Runnable onReady, Runnable onErrorCleanup) {
         boolean prepareFace = face && !"bundled".equals(androidModuleMode(FACE_MODE_METADATA));
         boolean prepareBarcode = barcode
@@ -601,6 +636,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
         cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
             cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, loadingMessage,
+            localization,
             new MlKitModelsModuleInstaller.Callback() {
                 @Override
                 public void onReady(JSONObject result) {
@@ -625,16 +661,20 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         return (JSONObject) raw;
     }
 
-    private static String moduleLoadingMessage(JSONObject options) {
+    private String moduleLoadingMessage(JSONObject options) {
         if (options == null || !options.has("moduleLoadingMessage")
             || options.isNull("moduleLoadingMessage")) {
-            return DEFAULT_MODULE_LOADING_MESSAGE;
+            return localization(options).text("loading_module");
         }
         Object value = options.opt("moduleLoadingMessage");
         if (!(value instanceof String)) {
             throw new IllegalArgumentException("moduleLoadingMessage must be a string or null.");
         }
         return (String) value;
+    }
+
+    private MlKitLocalization localization(JSONObject options) {
+        return MlKitLocalization.from(cordova.getActivity(), options);
     }
 
     private boolean documentScannerDeviceSupported() {

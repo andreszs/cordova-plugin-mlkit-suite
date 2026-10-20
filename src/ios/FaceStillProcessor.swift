@@ -19,7 +19,9 @@ final class FaceStillProcessor {
 
     func process(data: Data, directory: URL, completion: @escaping (Result<FaceCaptureResult, Error>) -> Void) {
         guard let decoded = UIImage(data: data), let normalized = normalizedImage(decoded) else {
-            completion(.failure(MlKitSuiteError.processingFailed("Unable to decode the captured photo.", true)))
+            completion(.failure(MlKitSuiteError.processingFailed(
+                options.localization.text("face_decode_failed"), true
+            )))
             return
         }
         let visionImage = VisionImage(image: normalized)
@@ -28,7 +30,9 @@ final class FaceStillProcessor {
             guard let self = self else { return }
             if let error = error {
                 completion(.failure(MlKitSuiteError.processingFailed(
-                    "Unable to detect a face in the captured photo: \(error.localizedDescription)", true
+                    self.options.localization.format(
+                        "face_detect_failed", error.localizedDescription
+                    ), true
                 )))
                 return
             }
@@ -45,22 +49,25 @@ final class FaceStillProcessor {
         if options.checks.singleFace && faces.count != 1 {
             throw MlKitSuiteError.captureFailed(
                 faces.isEmpty
-                    ? "No face was found in the captured photo."
-                    : "More than one face was found in the captured photo.",
+                    ? options.localization.text("face_not_found")
+                    : options.localization.text("face_multiple_found"),
                 true
             )
         }
         guard let face = faces.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
-            throw MlKitSuiteError.captureFailed("No face was found in the captured photo.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_not_found"), true)
         }
         try validate(face: face, imageSize: image.size)
         guard let cgImage = image.cgImage else {
-            throw MlKitSuiteError.processingFailed("Unable to access captured image pixels.", false)
+            throw MlKitSuiteError.processingFailed(
+                options.localization.text("face_pixels_failed"), false)
         }
         let crop = cropRect(face: face.frame, imageSize: image.size,
                             aspect: CGFloat(options.outputWidth) / CGFloat(options.outputHeight)).integral
         guard let cropped = cgImage.cropping(to: crop) else {
-            throw MlKitSuiteError.processingFailed("Unable to crop the captured photo.", false)
+            throw MlKitSuiteError.processingFailed(
+                options.localization.text("face_crop_failed"), false)
         }
 
         let format = UIGraphicsImageRendererFormat()
@@ -72,16 +79,20 @@ final class FaceStillProcessor {
         }
         let quality = imageQuality(output)
         if options.checks.brightness && quality.brightness < 0.20 {
-            throw MlKitSuiteError.captureFailed("The captured photo is too dark.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_too_dark"), true)
         }
         if options.checks.brightness && quality.brightness > 0.90 {
-            throw MlKitSuiteError.captureFailed("The captured photo is too bright.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_too_bright"), true)
         }
         if options.checks.sharpness && quality.sharpness < 0.10 {
-            throw MlKitSuiteError.captureFailed("The captured photo is not sharp enough.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_not_sharp"), true)
         }
         guard let jpeg = output.jpegData(compressionQuality: CGFloat(options.jpegQuality) / 100) else {
-            throw MlKitSuiteError.processingFailed("Unable to encode the captured JPEG.", false)
+            throw MlKitSuiteError.processingFailed(
+                options.localization.text("face_encode_failed"), false)
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent("face-\(UUID().uuidString.lowercased()).jpg")
@@ -108,27 +119,32 @@ final class FaceStillProcessor {
             face.frame.midY / imageSize.height - 0.44
         )
         if options.checks.faceSize && widthFraction < 0.22 {
-            throw MlKitSuiteError.captureFailed("Move closer to the camera.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_move_closer_retry"), true)
         }
         if options.checks.centering && centerOffset > 0.18 {
-            throw MlKitSuiteError.captureFailed("Center your face and try again.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_center_retry"), true)
         }
         if options.checks.pose && (
             (face.hasHeadEulerAngleY && abs(face.headEulerAngleY) > 13)
                 || (face.hasHeadEulerAngleX && abs(face.headEulerAngleX) > 13)
                 || (face.hasHeadEulerAngleZ && abs(face.headEulerAngleZ) > 11)
         ) {
-            throw MlKitSuiteError.captureFailed("Look straight at the camera.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_look_straight_retry"), true)
         }
         if options.checks.eyesOpen && (
             !face.hasLeftEyeOpenProbability || !face.hasRightEyeOpenProbability
                 || face.leftEyeOpenProbability < 0.58 || face.rightEyeOpenProbability < 0.58
         ) {
-            throw MlKitSuiteError.captureFailed("Keep both eyes open.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_open_eyes_retry"), true)
         }
         if options.checks.neutralExpression
             && face.hasSmilingProbability && face.smilingProbability > 0.42 {
-            throw MlKitSuiteError.captureFailed("Use a neutral expression.", true)
+            throw MlKitSuiteError.captureFailed(
+                options.localization.text("face_neutral_retry"), true)
         }
     }
 

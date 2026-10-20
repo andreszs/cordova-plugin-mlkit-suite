@@ -98,10 +98,12 @@ final class FaceStillProcessor {
     private Result createResult(Bitmap source, List<Face> faces, File directory) throws Exception {
         if (faces.size() != 1 && config.checks.singleFace) {
             throw new RetryException(faces.isEmpty()
-                ? "No face was found in the captured photo."
-                : "More than one face was found in the captured photo.");
+                ? config.localization.text("face_not_found")
+                : config.localization.text("face_multiple_found"));
         }
-        if (faces.isEmpty()) throw new RetryException("No face was found in the captured photo.");
+        if (faces.isEmpty()) {
+            throw new RetryException(config.localization.text("face_not_found"));
+        }
         Face face = largestFace(faces);
         validateFace(face, source.getWidth(), source.getHeight());
         Rect crop = cropRect(face.getBoundingBox(), source.getWidth(), source.getHeight(),
@@ -113,15 +115,15 @@ final class FaceStillProcessor {
         float[] quality = quality(output);
         if (config.checks.brightness && quality[0] < 0.20f) {
             output.recycle();
-            throw new RetryException("The captured photo is too dark.");
+            throw new RetryException(config.localization.text("face_too_dark"));
         }
         if (config.checks.brightness && quality[0] > 0.90f) {
             output.recycle();
-            throw new RetryException("The captured photo is too bright.");
+            throw new RetryException(config.localization.text("face_too_bright"));
         }
         if (config.checks.sharpness && quality[1] < 0.10f) {
             output.recycle();
-            throw new RetryException("The captured photo is not sharp enough.");
+            throw new RetryException(config.localization.text("face_not_sharp"));
         }
 
         if (!directory.exists() && !directory.mkdirs()) {
@@ -144,20 +146,24 @@ final class FaceStillProcessor {
         float fraction = box.width() / (float) width;
         float offset = (float) Math.hypot(box.exactCenterX() / width - 0.5f,
             box.exactCenterY() / height - 0.44f);
-        if (config.checks.faceSize && fraction < 0.22f) throw new RetryException("Move closer to the camera.");
-        if (config.checks.centering && offset > 0.18f) throw new RetryException("Center your face and try again.");
+        if (config.checks.faceSize && fraction < 0.22f) {
+            throw new RetryException(config.localization.text("face_move_closer_retry"));
+        }
+        if (config.checks.centering && offset > 0.18f) {
+            throw new RetryException(config.localization.text("face_center_retry"));
+        }
         if (config.checks.pose && (Math.abs(face.getHeadEulerAngleY()) > 13f
             || Math.abs(face.getHeadEulerAngleX()) > 13f || Math.abs(face.getHeadEulerAngleZ()) > 11f)) {
-            throw new RetryException("Look straight at the camera.");
+            throw new RetryException(config.localization.text("face_look_straight_retry"));
         }
         Float left = face.getLeftEyeOpenProbability();
         Float right = face.getRightEyeOpenProbability();
         if (config.checks.eyesOpen && (left == null || right == null || left < 0.58f || right < 0.58f)) {
-            throw new RetryException("Keep both eyes open.");
+            throw new RetryException(config.localization.text("face_open_eyes_retry"));
         }
         Float smile = face.getSmilingProbability();
         if (config.checks.neutralExpression && smile != null && smile > 0.42f) {
-            throw new RetryException("Use a neutral expression.");
+            throw new RetryException(config.localization.text("face_neutral_retry"));
         }
     }
 

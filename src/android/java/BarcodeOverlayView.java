@@ -15,18 +15,23 @@ final class BarcodeOverlayView extends View {
     private final RectF guide = new RectF();
     private final String instruction;
     private final Integer guideColor;
-    private String message = "Looking for a barcode";
+    private String message;
     private boolean candidateVisible;
 
-    BarcodeOverlayView(Context context, String instruction, Integer guideColor) {
+    BarcodeOverlayView(Context context, String instruction, Integer guideColor,
+                       String initialMessage) {
         super(context);
         this.instruction = instruction;
         this.guideColor = guideColor;
+        this.message = initialMessage;
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
     }
 
     BarcodeOverlayView(Context context, AttributeSet attrs) {
-        this(context, "Place a barcode inside the frame", null);
+        this(context,
+            MlKitLocalization.from(context, (Object) null).text("barcode_instruction"),
+            null,
+            MlKitLocalization.from(context, (Object) null).text("barcode_searching"));
     }
 
     void update(String text, boolean hasCandidate) {

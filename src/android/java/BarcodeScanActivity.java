@@ -68,7 +68,7 @@ public final class BarcodeScanActivity extends Activity
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         try {
-            config = BarcodeScanConfig.fromJson(new JSONObject(
+            config = BarcodeScanConfig.fromJson(this, new JSONObject(
                 getIntent().getStringExtra(EXTRA_OPTIONS_JSON)));
         } catch (Exception error) {
             finishWithError("INVALID_ARGUMENT", "Invalid barcode scan options.", false);
@@ -130,12 +130,13 @@ public final class BarcodeScanActivity extends Activity
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
         root.addView(previewView, matchParent());
 
-        overlayView = new BarcodeOverlayView(this, config.instructionText, config.guideColor);
+        overlayView = new BarcodeOverlayView(this, config.instructionText, config.guideColor,
+            config.localization.text("barcode_searching"));
         root.addView(overlayView, matchParent());
 
         if (config.showCloseButton) {
             ImageButton close = cameraIconButton(
-                BarcodeIconDrawable.CLOSE, "Close barcode scanner", false
+                BarcodeIconDrawable.CLOSE, config.localization.text("close_barcode"), false
             );
             close.setOnClickListener(view -> cancelByUser());
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(52), dp(52));
@@ -147,7 +148,7 @@ public final class BarcodeScanActivity extends Activity
 
         if (config.showTorchButton) {
             torchButton = cameraIconButton(
-                BarcodeIconDrawable.TORCH, "Turn torch on", false
+                BarcodeIconDrawable.TORCH, config.localization.text("turn_torch_on"), false
             );
             torchButton.setVisibility(View.GONE);
             torchButton.setOnClickListener(view -> toggleTorch());
@@ -175,7 +176,8 @@ public final class BarcodeScanActivity extends Activity
             try {
                 cameraProvider = future.get();
                 if (!cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) {
-                    finishWithError("CAMERA_UNAVAILABLE", "A rear camera is not available.", false);
+                    finishWithError("CAMERA_UNAVAILABLE",
+                        config.localization.text("rear_camera_missing"), false);
                     return;
                 }
                 Size resolution = new Size(BarcodeScanConfig.TARGET_WIDTH,
@@ -201,8 +203,8 @@ public final class BarcodeScanActivity extends Activity
                     torchButton.setVisibility(View.VISIBLE);
                 }
             } catch (Exception error) {
-                finishWithError("CAMERA_UNAVAILABLE", "Unable to start the rear camera: "
-                    + error.getMessage(), true);
+                finishWithError("CAMERA_UNAVAILABLE",
+                    config.localization.format("rear_camera_start_failed", error.getMessage()), true);
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -214,17 +216,18 @@ public final class BarcodeScanActivity extends Activity
         torchButton.setImageDrawable(new BarcodeIconDrawable(
             BarcodeIconDrawable.TORCH, torchEnabled
         ));
-        torchButton.setContentDescription(torchEnabled ? "Turn torch off" : "Turn torch on");
+        torchButton.setContentDescription(config.localization.text(
+            torchEnabled ? "turn_torch_off" : "turn_torch_on"));
     }
 
     @Override
     public void onSearching() {
-        if (!completed) overlayView.update("Looking for a barcode", false);
+        if (!completed) overlayView.update(config.localization.text("barcode_searching"), false);
     }
 
     @Override
     public void onOutsideGuide() {
-        if (!completed) overlayView.update("Center the barcode inside the frame", false);
+        if (!completed) overlayView.update(config.localization.text("barcode_center"), false);
     }
 
     @Override
@@ -237,8 +240,8 @@ public final class BarcodeScanActivity extends Activity
     @Override
     public void onCandidate(String text, String format, int frames, int requiredFrames) {
         if (!completed) {
-            overlayView.update("Detected " + format + " — hold steady (" + frames
-                + "/" + requiredFrames + ")", true);
+            overlayView.update(config.localization.format(
+                "barcode_detected", format, frames, requiredFrames), true);
         }
     }
 
@@ -260,7 +263,9 @@ public final class BarcodeScanActivity extends Activity
 
     @Override
     public void onAnalyzerError(Exception error) {
-        if (!completed) overlayView.update("Unable to analyze the camera image", false);
+        if (!completed) {
+            overlayView.update(config.localization.text("barcode_analyze_failed"), false);
+        }
     }
 
     private void cancelByUser() {
@@ -268,7 +273,7 @@ public final class BarcodeScanActivity extends Activity
         completed = true;
         Intent intent = new Intent();
         intent.putExtra(EXTRA_ERROR_CODE, "USER_CANCELLED");
-        intent.putExtra(EXTRA_ERROR_MESSAGE, "Barcode scanning was cancelled by the user.");
+        intent.putExtra(EXTRA_ERROR_MESSAGE, config.localization.text("barcode_cancelled"));
         intent.putExtra(EXTRA_ERROR_RECOVERABLE, true);
         setResult(RESULT_CANCELED, intent);
         finish();
@@ -288,7 +293,7 @@ public final class BarcodeScanActivity extends Activity
     private void scheduleTimeout() {
         if (config.timeoutMs <= 0) return;
         timeoutRunnable = () -> finishWithError("TIMEOUT",
-            "No barcode was confirmed before the timeout.", true);
+            config.localization.text("barcode_timeout"), true);
         mainHandler.postDelayed(timeoutRunnable, config.timeoutMs);
     }
 

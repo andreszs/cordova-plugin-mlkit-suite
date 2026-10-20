@@ -9,11 +9,15 @@ var pluginXml = fs.readFileSync(path.join(root, 'plugin.xml'), 'utf8');
 var plugin = fs.readFileSync(path.join(root, 'src/ios/MlKitSuitePlugin.swift'), 'utf8');
 var controller = fs.readFileSync(path.join(root, 'src/ios/BarcodeScanViewController.swift'), 'utf8');
 var types = fs.readFileSync(path.join(root, 'src/ios/BarcodeScanTypes.swift'), 'utf8');
+var spanish = fs.readFileSync(path.join(
+    root, 'src/ios/MlKitSuiteResources.bundle/es.lproj/Localizable.strings'
+), 'utf8');
 
 [
     'src/ios/BarcodeScanTypes.swift',
     'src/ios/BarcodeOverlayView.swift',
-    'src/ios/BarcodeScanViewController.swift'
+    'src/ios/BarcodeScanViewController.swift',
+    'src/ios/MlKitLocalization.swift'
 ].forEach(function (source) {
     assert(pluginXml.includes('<source-file src="' + source + '" />'), source + ' must be packaged.');
 });
@@ -26,7 +30,7 @@ assert(controller.includes('position: .back'));
 assert(controller.includes('.hd1920x1080'));
 assert(controller.includes('VisionImage(buffer: sampleBuffer)'));
 assert(controller.includes('requiredConfirmationFrames = 2'));
-assert(controller.includes('Center the barcode inside the frame'));
+assert(controller.includes('options.localization.text("barcode_center")'));
 assert(controller.includes('overlayView.contains('));
 assert(types.includes('guideColor must be a color in #RRGGBB format.'));
 assert(controller.includes('setTorchModeOn'));
@@ -34,5 +38,7 @@ assert(controller.includes('UIImage(systemName: systemName'));
 assert(controller.includes('accessibilityLabel'));
 assert(types.includes('"PDF_417"'));
 assert(types.includes('"QR_CODE"'));
+assert(pluginXml.includes('src/ios/MlKitSuiteResources.bundle'));
+assert(spanish.includes('"barcode_center"'));
 
 process.stdout.write('iOS live barcode source contract tests passed.\n');

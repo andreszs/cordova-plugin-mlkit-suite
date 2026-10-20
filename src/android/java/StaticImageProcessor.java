@@ -25,13 +25,13 @@ final class StaticImageProcessor {
     private StaticImageProcessor() { }
 
     static void recognizeText(Context context, String rawPath, File cacheDirectory,
-                              CallbackContext callback) {
+                              MlKitLocalization localization, CallbackContext callback) {
         InputImage image;
         try {
             image = resolveImage(context, rawPath, cacheDirectory);
         } catch (Exception exception) {
             callback.error(MlKitSuitePlugin.error(
-                "INVALID_IMAGE", "Unable to open imagePath.", false
+                "INVALID_IMAGE", localization.text("image_open_failed"), false
             ));
             return;
         }
@@ -43,20 +43,21 @@ final class StaticImageProcessor {
             })
             .addOnFailureListener(error -> {
                 callback.error(MlKitSuitePlugin.error(
-                    "PROCESSING_FAILED", "Unable to recognize text in the image.", true
+                    "PROCESSING_FAILED", localization.text("text_recognition_failed"), true
                 ));
                 recognizer.close();
             });
     }
 
     static void scanBarcodes(Context context, String rawPath, File cacheDirectory,
-                             int[] formats, CallbackContext callback) {
+                             int[] formats, MlKitLocalization localization,
+                             CallbackContext callback) {
         InputImage image;
         try {
             image = resolveImage(context, rawPath, cacheDirectory);
         } catch (Exception exception) {
             callback.error(MlKitSuitePlugin.error(
-                "INVALID_IMAGE", "Unable to open imagePath.", false
+                "INVALID_IMAGE", localization.text("image_open_failed"), false
             ));
             return;
         }
@@ -74,7 +75,7 @@ final class StaticImageProcessor {
             })
             .addOnFailureListener(error -> {
                 callback.error(MlKitSuitePlugin.error(
-                    "PROCESSING_FAILED", "Unable to scan barcodes in the image.", true
+                    "PROCESSING_FAILED", localization.text("barcode_image_failed"), true
                 ));
                 scanner.close();
             });

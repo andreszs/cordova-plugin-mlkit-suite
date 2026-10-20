@@ -62,7 +62,8 @@ exports.getCapabilities = function getCapabilities() {
  *
  * @param {string|string[]|object} [modules] face, barcode, ocr, an array, or
  *        the options object when preparing every module.
- * @param {{moduleLoadingMessage?: string|null}} [options] Native loading text.
+ * @param {{moduleLoadingMessage?: string|null, locale?: string}} [options]
+ *        Native loading text and UI locale (`auto`, `en`, `es`, or BCP-47).
  * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
  */
 exports.prepareModels = function prepareModels(modules, options) {
@@ -95,7 +96,7 @@ exports.prepareModels = function prepareModels(modules, options) {
  *
  * @param {{pageLimit?: number, galleryImportAllowed?: boolean,
  *          resultFormats?: string[]|string, scannerMode?: string,
- *          moduleLoadingMessage?: string|null}} options
+ *          moduleLoadingMessage?: string|null, locale?: string}} options
  * @returns {Promise<object>} Scanned JPEG pages/PDF or a cancellation result.
  */
 exports.scanDocument = function scanDocument(options) {
@@ -108,7 +109,8 @@ exports.scanDocument = function scanDocument(options) {
  * Ensures that the Google Play services Document Scanner component is ready.
  * Shows the native loading indicator only when the component must download.
  *
- * @param {{moduleLoadingMessage?: string|null}} [options] Native loading text.
+ * @param {{moduleLoadingMessage?: string|null, locale?: string}} [options]
+ *        Native loading text and UI locale.
  * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
  */
 exports.prepareDocumentScanner = function prepareDocumentScanner(options) {
@@ -121,7 +123,8 @@ exports.prepareDocumentScanner = function prepareDocumentScanner(options) {
  * Recognizes Latin-script text in an existing local image.
  *
  * @param {string} imagePath Native path, file/content URI, or plugin image URI.
- * @param {{moduleLoadingMessage?: string|null}} [options] Native loading text.
+ * @param {{moduleLoadingMessage?: string|null, locale?: string}} [options]
+ *        Native loading text and UI locale.
  * @returns {Promise<string>} Plain recognized text; empty when none is found.
  */
 exports.recognizeText = function recognizeText(imagePath, options) {
@@ -142,7 +145,7 @@ exports.recognizeText = function recognizeText(imagePath, options) {
  *
  * @param {string} imagePath Native path, file/content URI, or plugin image URI.
  * @param {{formats?: string[]|string,
- *          moduleLoadingMessage?: string|null}} options Optional settings.
+ *          moduleLoadingMessage?: string|null, locale?: string}} options Optional settings.
  * @returns {Promise<object[]>} All detected barcodes; empty when none are found.
  */
 exports.scanBarcodes = function scanBarcodes(imagePath, options) {
@@ -165,7 +168,7 @@ exports.face = {
      * @param {{outputWidth?: number, outputHeight?: number, jpegQuality?: number,
      *          showCloseButton?: boolean, debugMode?: boolean,
      *          instructionText?: string, timeoutMs?: number,
-     *          moduleLoadingMessage?: string|null,
+     *          moduleLoadingMessage?: string|null, locale?: string,
      *          checks?: {singleFace?: boolean, faceSize?: boolean,
      *          centering?: boolean, pose?: boolean, eyesOpen?: boolean,
      *          neutralExpression?: boolean, stability?: boolean,
@@ -187,7 +190,7 @@ exports.barcode = {
      * @param {{formats?: string[]|string, showCloseButton?: boolean,
      *          showTorchButton?: boolean,
      *          instructionText?: string, guideColor?: string|null, timeoutMs?: number,
-     *          moduleLoadingMessage?: string|null}} options
+     *          moduleLoadingMessage?: string|null, locale?: string}} options
      * @returns {Promise<object>} A success result or {status: 'cancelled', reason: 'user'}.
      */
     scan: function scan(options) {

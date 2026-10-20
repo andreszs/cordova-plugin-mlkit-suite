@@ -55,7 +55,8 @@ final class BarcodeScanViewController: UIViewController {
 
         overlayView = BarcodeOverlayView(
             instruction: options.instructionText,
-            guideColor: options.guideColor
+            guideColor: options.guideColor,
+            initialMessage: options.localization.text("barcode_searching")
         )
         overlayView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(overlayView)
@@ -94,7 +95,10 @@ final class BarcodeScanViewController: UIViewController {
     }
 
     private func addCloseButton() {
-        let button = cameraIconButton(systemName: "xmark", accessibilityLabel: "Close barcode scanner")
+        let button = cameraIconButton(
+            systemName: "xmark",
+            accessibilityLabel: options.localization.text("close_barcode")
+        )
         button.addTarget(self, action: #selector(cancelByUser), for: .touchUpInside)
         view.addSubview(button)
         NSLayoutConstraint.activate([
@@ -106,7 +110,10 @@ final class BarcodeScanViewController: UIViewController {
     }
 
     private func addTorchButton() {
-        let button = cameraIconButton(systemName: "bolt.fill", accessibilityLabel: "Turn torch on")
+        let button = cameraIconButton(
+            systemName: "bolt.fill",
+            accessibilityLabel: options.localization.text("turn_torch_on")
+        )
         button.isHidden = true
         button.addTarget(self, action: #selector(toggleTorch), for: .touchUpInside)
         view.addSubview(button)
@@ -146,13 +153,15 @@ final class BarcodeScanViewController: UIViewController {
                 guard let camera = AVCaptureDevice.default(
                     .builtInWideAngleCamera, for: .video, position: .back
                 ) else {
-                    throw MlKitSuiteError.cameraUnavailable("A rear camera is not available.", false)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("rear_camera_missing"), false)
                 }
                 self.camera = camera
                 try self.configureFocus(camera)
                 let input = try AVCaptureDeviceInput(device: camera)
                 guard self.session.canAddInput(input) else {
-                    throw MlKitSuiteError.cameraUnavailable("Unable to connect the rear camera.", true)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("rear_camera_connect_failed"), true)
                 }
                 self.session.addInput(input)
 
@@ -164,7 +173,8 @@ final class BarcodeScanViewController: UIViewController {
                 ]
                 output.setSampleBufferDelegate(self, queue: self.analysisQueue)
                 guard self.session.canAddOutput(output) else {
-                    throw MlKitSuiteError.cameraUnavailable("Unable to configure camera analysis.", true)
+                    throw MlKitSuiteError.cameraUnavailable(
+                        self.options.localization.text("camera_analysis_config_failed"), true)
                 }
                 self.session.addOutput(output)
                 self.configure(connection: output.connection(with: .video))
@@ -183,7 +193,9 @@ final class BarcodeScanViewController: UIViewController {
                 if beganConfiguration { self.session.commitConfiguration() }
                 DispatchQueue.main.async {
                     self.fail(.cameraUnavailable(
-                        "Unable to start the rear camera: \(error.localizedDescription)", true
+                        self.options.localization.format(
+                            "rear_camera_start_failed", error.localizedDescription
+                        ), true
                     ))
                 }
             }
@@ -226,13 +238,17 @@ final class BarcodeScanViewController: UIViewController {
                     self?.torchButton?.tintColor = enabled
                         ? UIColor(red: 0.98, green: 0.74, blue: 0.02, alpha: 1)
                         : UIColor(red: 0.48, green: 0.52, blue: 0.59, alpha: 1)
-                    self?.torchButton?.accessibilityLabel = enabled
-                        ? "Turn torch off" : "Turn torch on"
+                    self?.torchButton?.accessibilityLabel = self?.options.localization.text(
+                        enabled ? "turn_torch_off" : "turn_torch_on"
+                    )
                 }
             } catch {
                 if locked { camera.unlockForConfiguration() }
                 DispatchQueue.main.async {
-                    self?.overlayView.update(message: "Unable to change the torch", hasCandidate: false)
+                    self?.overlayView.update(
+                        message: self?.options.localization.text("torch_change_failed") ?? "",
+                        hasCandidate: false
+                    )
                 }
             }
         }
@@ -257,8 +273,8 @@ final class BarcodeScanViewController: UIViewController {
             resetConfirmation()
             updateOverlay(
                 message: decoded.isEmpty
-                    ? "Looking for a barcode"
-                    : "Center the barcode inside the frame",
+                    ? options.localization.text("barcode_searching")
+                    : options.localization.text("barcode_center"),
                 hasCandidate: false
             )
             return
@@ -273,7 +289,9 @@ final class BarcodeScanViewController: UIViewController {
             consecutiveFrames = 1
         }
         updateOverlay(
-            message: "Detected \(format) — hold steady (\(consecutiveFrames)/\(Self.requiredConfirmationFrames))",
+            message: options.localization.format(
+                "barcode_detected", format, consecutiveFrames, Self.requiredConfirmationFrames
+            ),
             hasCandidate: true
         )
         if consecutiveFrames >= Self.requiredConfirmationFrames {
@@ -300,7 +318,8 @@ final class BarcodeScanViewController: UIViewController {
     private func scheduleTimeout() {
         guard options.timeoutMs > 0 else { return }
         let item = DispatchWorkItem { [weak self] in
-            self?.fail(.timeout("No barcode was confirmed before the timeout."))
+            guard let self = self else { return }
+            self.fail(.timeout(self.options.localization.text("barcode_timeout")))
         }
         timeoutItem = item
         DispatchQueue.main.asyncAfter(
@@ -359,7 +378,10 @@ extension BarcodeScanViewController: AVCaptureVideoDataOutputSampleBufferDelegat
                     self.handle(barcodes ?? [], imageSize: imageSize)
                 } else {
                     self.resetConfirmation()
-                    self.updateOverlay(message: "Unable to analyze the camera image", hasCandidate: false)
+                    self.updateOverlay(
+                        message: self.options.localization.text("barcode_analyze_failed"),
+                        hasCandidate: false
+                    )
                 }
             }
         }

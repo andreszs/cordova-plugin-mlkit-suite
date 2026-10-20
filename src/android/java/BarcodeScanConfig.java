@@ -1,5 +1,6 @@
 package com.andreszs.plugins.mlkitsuite;
 
+import android.content.Context;
 import android.graphics.Color;
 
 import com.google.mlkit.vision.barcode.common.Barcode;
@@ -43,12 +44,14 @@ final class BarcodeScanConfig {
     final boolean showCloseButton;
     final boolean showTorchButton;
     final String instructionText;
+    final MlKitLocalization localization;
     final Integer guideColor;
     final long timeoutMs;
 
     private BarcodeScanConfig(List<String> formatNames,
                               boolean showCloseButton, boolean showTorchButton,
-                              String instructionText, Integer guideColor, long timeoutMs) {
+                              String instructionText, MlKitLocalization localization,
+                              Integer guideColor, long timeoutMs) {
         this.formatNames = Collections.unmodifiableList(formatNames);
         this.formatValues = new int[formatNames.size()];
         for (int index = 0; index < formatNames.size(); index++) {
@@ -57,21 +60,24 @@ final class BarcodeScanConfig {
         this.showCloseButton = showCloseButton;
         this.showTorchButton = showTorchButton;
         this.instructionText = instructionText;
+        this.localization = localization;
         this.guideColor = guideColor;
         this.timeoutMs = timeoutMs;
     }
 
-    static BarcodeScanConfig fromJson(JSONObject options) {
+    static BarcodeScanConfig fromJson(Context context, JSONObject options) {
         JSONObject value = options == null ? new JSONObject() : options;
+        MlKitLocalization localization = MlKitLocalization.from(context, value);
         rejectUnknown(value);
         List<String> formats = parseFormats(value.opt("formats"));
         boolean close = strictBoolean(value, "showCloseButton", true);
         boolean torch = strictBoolean(value, "showTorchButton", true);
         String instruction = strictString(value, "instructionText",
-            "Place a barcode inside the frame");
+            localization.text("barcode_instruction"));
         Integer guideColor = strictColor(value, "guideColor");
         long timeout = strictLong(value, "timeoutMs", 0L, 0L, 600000L);
-        return new BarcodeScanConfig(formats, close, torch, instruction, guideColor, timeout);
+        return new BarcodeScanConfig(formats, close, torch, instruction, localization,
+            guideColor, timeout);
     }
 
     static JSONArray supportedFormatsJson() {
@@ -85,7 +91,8 @@ final class BarcodeScanConfig {
         Iterator<String> keys = value.keys();
         while (keys.hasNext()) {
             String key = keys.next();
-            if (!("formats".equals(key) || "moduleLoadingMessage".equals(key))) {
+            if (!("formats".equals(key) || "moduleLoadingMessage".equals(key)
+                || "locale".equals(key))) {
                 throw new IllegalArgumentException("Unknown barcode image option: " + key + ".");
             }
         }
@@ -141,7 +148,7 @@ final class BarcodeScanConfig {
                 || "showCloseButton".equals(key) || "showTorchButton".equals(key)
                 || "instructionText".equals(key) || "guideColor".equals(key)
                 || "timeoutMs".equals(key)
-                || "moduleLoadingMessage".equals(key))) {
+                || "moduleLoadingMessage".equals(key) || "locale".equals(key))) {
                 throw new IllegalArgumentException("Unknown barcode scan option: " + key + ".");
             }
         }

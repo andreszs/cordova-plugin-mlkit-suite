@@ -26,6 +26,12 @@ final class MlKitSuitePlugin: CDVPlugin {
             "offline": true,
             "modelDelivery": "bundled",
             "modelDownloadStrategy": "bundled",
+            "localization": [
+                "default": "auto",
+                "supportedLocales": MlKitLocalization.supportedLocales,
+                "deviceLocale": Locale.preferredLanguages.first ?? "en",
+                "resolvedLocale": localization([:]).locale
+            ],
             "face": [
                 "capture": true,
                 "frontCamera": true,
@@ -82,8 +88,9 @@ final class MlKitSuitePlugin: CDVPlugin {
     @objc(barcodeScan:)
     func barcodeScan(_ command: CDVInvokedUrlCommand) {
         guard pendingCallbackId == nil else {
+            let localization = localization(command.argument(at: 0) as? [String: Any] ?? [:])
             sendError(callbackId: command.callbackId, code: "BUSY",
-                      message: "A camera session is already active.", recoverable: true)
+                      message: localization.text("busy"), recoverable: true)
             return
         }
         do {
@@ -102,20 +109,34 @@ final class MlKitSuitePlugin: CDVPlugin {
 
     @objc(documentScan:)
     func documentScan(_ command: CDVInvokedUrlCommand) {
+        let localization = localization(command.argument(at: 0) as? [String: Any] ?? [:])
         sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
-                  message: "ML Kit Document Scanner is currently available on Android only.",
+                  message: localization.text("document_unsupported_platform"),
                   recoverable: false)
     }
 
     @objc(prepareDocumentScanner:)
     func prepareDocumentScanner(_ command: CDVInvokedUrlCommand) {
+        let localization = localization(command.argument(at: 0) as? [String: Any] ?? [:])
         sendError(callbackId: command.callbackId, code: "UNSUPPORTED_PLATFORM",
-                  message: "ML Kit Document Scanner is currently available on Android only.",
+                  message: localization.text("document_unsupported_platform"),
                   recoverable: false)
     }
 
     @objc(recognizeText:)
     func recognizeText(_ command: CDVInvokedUrlCommand) {
+        let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
+        let localization: MlKitLocalization
+        do {
+            localization = try MlKitLocalization(dictionary: dictionary)
+        } catch let error as MlKitSuiteError {
+            sendErrorPayload(callbackId: command.callbackId, payload: error.payload)
+            return
+        } catch {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: error.localizedDescription, recoverable: false)
+            return
+        }
         guard let rawPath = command.argument(at: 0) as? String,
               !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
@@ -129,8 +150,10 @@ final class MlKitSuitePlugin: CDVPlugin {
                 let recognizer = TextRecognizer.textRecognizer(options: TextRecognizerOptions())
                 recognizer.process(image) { result, error in
                     if error != nil || result == nil {
-                        self.sendError(callbackId: command.callbackId, code: "PROCESSING_FAILED",
-                                       message: "Unable to recognize text in the image.", recoverable: true)
+                        self.sendError(
+                            callbackId: command.callbackId, code: "PROCESSING_FAILED",
+                            message: localization.text("text_recognition_failed"), recoverable: true
+                        )
                         return
                     }
                     self.commandDelegate.send(
@@ -140,13 +163,25 @@ final class MlKitSuitePlugin: CDVPlugin {
                 }
             } catch {
                 self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
-                               message: "Unable to open imagePath.", recoverable: false)
+                               message: localization.text("image_open_failed"), recoverable: false)
             }
         })
     }
 
     @objc(scanBarcodes:)
     func scanBarcodes(_ command: CDVInvokedUrlCommand) {
+        let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
+        let localization: MlKitLocalization
+        do {
+            localization = try MlKitLocalization(dictionary: dictionary)
+        } catch let error as MlKitSuiteError {
+            sendErrorPayload(callbackId: command.callbackId, payload: error.payload)
+            return
+        } catch {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: error.localizedDescription, recoverable: false)
+            return
+        }
         guard let rawPath = command.argument(at: 0) as? String,
               !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
@@ -154,8 +189,8 @@ final class MlKitSuitePlugin: CDVPlugin {
             return
         }
         do {
-            let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
-            for key in dictionary.keys where key != "formats" && key != "moduleLoadingMessage" {
+            for key in dictionary.keys where key != "formats"
+                && key != "moduleLoadingMessage" && key != "locale" {
                 throw MlKitSuiteError.invalidArgument("Unknown barcode image option: \(key).")
             }
             let formats = try BarcodeFormatSupport.parse(dictionary["formats"])
@@ -167,8 +202,10 @@ final class MlKitSuitePlugin: CDVPlugin {
                     let scanner = BarcodeScanner.barcodeScanner(options: options)
                     scanner.process(image) { barcodes, error in
                         if error != nil || barcodes == nil {
-                            self.sendError(callbackId: command.callbackId, code: "PROCESSING_FAILED",
-                                           message: "Unable to scan barcodes in the image.", recoverable: true)
+                            self.sendError(
+                                callbackId: command.callbackId, code: "PROCESSING_FAILED",
+                                message: localization.text("barcode_image_failed"), recoverable: true
+                            )
                             return
                         }
                         let payload = (barcodes ?? []).map { self.barcodeDictionary($0) }
@@ -179,7 +216,7 @@ final class MlKitSuitePlugin: CDVPlugin {
                     }
                 } catch {
                     self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
-                                   message: "Unable to open imagePath.", recoverable: false)
+                                   message: localization.text("image_open_failed"), recoverable: false)
                 }
             })
         } catch let error as MlKitSuiteError {
@@ -193,8 +230,9 @@ final class MlKitSuitePlugin: CDVPlugin {
     @objc(faceCapture:)
     func faceCapture(_ command: CDVInvokedUrlCommand) {
         guard pendingCallbackId == nil else {
+            let localization = localization(command.argument(at: 0) as? [String: Any] ?? [:])
             sendError(callbackId: command.callbackId, code: "BUSY",
-                      message: "A camera session is already active.", recoverable: true)
+                      message: localization.text("busy"), recoverable: true)
             return
         }
         do {
@@ -229,16 +267,20 @@ final class MlKitSuitePlugin: CDVPlugin {
                         self.presentCapture(options)
                     } else {
                         self.finishWithError(code: "CAMERA_PERMISSION_DENIED",
-                                             message: "Camera permission was denied.", recoverable: true)
+                                             message: options.localization.text(
+                                                "camera_permission_denied"
+                                             ), recoverable: true)
                     }
                 }
             }
         case .denied, .restricted:
             finishWithError(code: "CAMERA_PERMISSION_DENIED",
-                            message: "Camera permission was denied.", recoverable: true)
+                            message: options.localization.text("camera_permission_denied"),
+                            recoverable: true)
         @unknown default:
             finishWithError(code: "CAMERA_PERMISSION_DENIED",
-                            message: "Unable to determine camera permission.", recoverable: true)
+                            message: options.localization.text("camera_permission_unknown"),
+                            recoverable: true)
         }
     }
 
@@ -246,7 +288,8 @@ final class MlKitSuitePlugin: CDVPlugin {
         guard pendingCallbackId != nil else { return }
         guard let host = viewController else {
             finishWithError(code: "CAMERA_UNAVAILABLE",
-                            message: "The application view controller is unavailable.", recoverable: false)
+                            message: options.localization.text("view_controller_unavailable"),
+                            recoverable: false)
             return
         }
         let controller = FaceCaptureViewController(options: options)
@@ -267,16 +310,20 @@ final class MlKitSuitePlugin: CDVPlugin {
                         self.presentBarcodeScanner(options)
                     } else {
                         self.finishWithError(code: "CAMERA_PERMISSION_DENIED",
-                                             message: "Camera permission was denied.", recoverable: true)
+                                             message: options.localization.text(
+                                                "camera_permission_denied"
+                                             ), recoverable: true)
                     }
                 }
             }
         case .denied, .restricted:
             finishWithError(code: "CAMERA_PERMISSION_DENIED",
-                            message: "Camera permission was denied.", recoverable: true)
+                            message: options.localization.text("camera_permission_denied"),
+                            recoverable: true)
         @unknown default:
             finishWithError(code: "CAMERA_PERMISSION_DENIED",
-                            message: "Unable to determine camera permission.", recoverable: true)
+                            message: options.localization.text("camera_permission_unknown"),
+                            recoverable: true)
         }
     }
 
@@ -284,7 +331,8 @@ final class MlKitSuitePlugin: CDVPlugin {
         guard pendingCallbackId != nil else { return }
         guard let host = viewController else {
             finishWithError(code: "CAMERA_UNAVAILABLE",
-                            message: "The application view controller is unavailable.", recoverable: false)
+                            message: options.localization.text("view_controller_unavailable"),
+                            recoverable: false)
             return
         }
         let controller = BarcodeScanViewController(options: options)
@@ -383,6 +431,11 @@ final class MlKitSuitePlugin: CDVPlugin {
         ])
     }
 
+    private func localization(_ dictionary: [String: Any]) -> MlKitLocalization {
+        return (try? MlKitLocalization(dictionary: dictionary))
+            ?? (try! MlKitLocalization())
+    }
+
     private func sendErrorPayload(callbackId: String, payload: [String: Any]) {
         commandDelegate.send(CDVPluginResult(status: CDVCommandStatus.error, messageAs: payload),
                              callbackId: callbackId)
@@ -478,12 +531,13 @@ extension MlKitSuitePlugin: FaceCaptureViewControllerDelegate {
     }
 
     func faceCaptureDidCancel(_ controller: FaceCaptureViewController) {
-        guard let callbackId = pendingCallbackId else { return }
+        guard let callbackId = pendingCallbackId, let options = pendingOptions else { return }
+        let message = options.localization.text("face_cancelled")
         controller.dismiss(animated: true) { [weak self] in
             guard let self = self else { return }
             self.clearPending()
             self.sendError(callbackId: callbackId, code: "USER_CANCELLED",
-                           message: "Face capture was cancelled by the user.", recoverable: true)
+                           message: message, recoverable: true)
         }
     }
 
@@ -517,12 +571,14 @@ extension MlKitSuitePlugin: BarcodeScanViewControllerDelegate {
     }
 
     func barcodeScanDidCancel(_ controller: BarcodeScanViewController) {
-        guard let callbackId = pendingCallbackId else { return }
+        guard let callbackId = pendingCallbackId,
+              let options = pendingBarcodeOptions else { return }
+        let message = options.localization.text("barcode_cancelled")
         controller.dismiss(animated: true) { [weak self] in
             guard let self = self else { return }
             self.clearPending()
             self.sendError(callbackId: callbackId, code: "USER_CANCELLED",
-                           message: "Barcode scanning was cancelled by the user.", recoverable: true)
+                           message: message, recoverable: true)
         }
     }
 
