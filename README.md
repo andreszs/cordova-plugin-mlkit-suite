@@ -1,5 +1,7 @@
 ![npm version](https://img.shields.io/npm/v/cordova-plugin-mlkit-suite) ![GitHub package.json version](https://img.shields.io/github/package-json/v/andreszs/cordova-plugin-mlkit-suite?color=FF6D00&label=main&logo=github)
 
+<img src="docs/mlkit-logo.svg" alt="ML Kit logo" width="64" align="right">
+
 # cordova-plugin-mlkit-suite
 
 Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. Version `0.1.0` includes guided face capture, camera and still-image barcode scanning, Latin text recognition, and the native Android document scanner.
