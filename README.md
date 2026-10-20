@@ -2,7 +2,7 @@
 
 # cordova-plugin-mlkit-suite
 
-Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.1.0` includes guided face capture, camera and still-image barcode scanning, Latin text recognition, and the native Android document scanner.
+Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. Version `0.1.0` includes guided face capture, camera and still-image barcode scanning, Latin text recognition, and the native Android document scanner.
 
 > [!WARNING]
 > This plugin is in active development and has not been published to npm. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
@@ -14,6 +14,7 @@ Extensible Google ML Kit integration for Cordova on Android and iOS. Version `0.
   - [Changing the Android modes](#changing-the-android-modes)
   - [iOS setup](#ios-setup)
 - [Android model delivery](#android-model-delivery)
+  - [Bundled vs unbundled](#bundled-vs-unbundled)
   - [Play services download timing](#play-services-download-timing)
   - [Native module-loading indicator](#native-module-loading-indicator)
 - [API overview](#api-overview)
@@ -127,17 +128,46 @@ The plugin requests camera access. Generated images and PDFs are written to the 
 
 ## Android model delivery
 
-For each of Face Detection, Barcode Scanning, and Text Recognition, the plugin offers three modes built on Google's [model installation paths](https://developers.google.com/ml-kit/tips/installation-paths). This is independent of APK versus AAB packaging. An AAB removes unused CPU architectures from each device download, but does not turn a bundled dependency into a Google Play services module.
+Face Detection, Barcode Scanning, and Latin Text Recognition independently support the two official [ML Kit model installation paths](https://developers.google.com/ml-kit/tips/installation-paths): bundled in the application or unbundled through Google Play services. The plugin exposes `install-time` and `first-use` as two download timings for the same unbundled implementation.
 
-| Mode | Advantages | Trade-offs | Estimated current CA15 payload |
+### Bundled vs unbundled
+
+| Feature | Unbundled — Google Play services | Bundled — application package |
+| --- | --- | --- |
+| Implementation | The model is downloaded and managed by Google Play services. | The model is statically linked into the app at build time. |
+| App download | Smaller APK/AAB; only the thin client is packaged. | Larger APK/AAB because the model is packaged with the app. |
+| First availability | The module must finish downloading before inference can run. | Available immediately after installation. |
+| Offline first use | Not guaranteed. | Yes. |
+| Model updates | Managed independently by Google Play services. | Require updating and rebuilding the app. |
+| Plugin values | `install-time` or `first-use` | `bundled` |
+
+Google's current size guidance for the exact Android dependency families used by this plugin is:
+
+| Module | Unbundled app-size increase | Bundled app-size increase | Official guide |
+| --- | ---: | ---: | --- |
+| Face Detection | about 0.8 MB | about 6.9 MB | [Face Detection for Android](https://developers.google.com/ml-kit/vision/face-detection/android) |
+| Barcode Scanning | about 0.2 MB | about 2.4 MB | [Barcode Scanning for Android](https://developers.google.com/ml-kit/vision/barcode-scanning/android) |
+| Latin Text Recognition | about 0.26 MB per architecture | about 4 MB per script and architecture | [Text Recognition for Android](https://developers.google.com/ml-kit/vision/text-recognition/v2/android) |
+| Document Scanner | about 0.3 MB; always delivered through Play services | not available | [Document Scanner for Android](https://developers.google.com/ml-kit/vision/doc-scanner/android) |
+
+These are Google's incremental estimates, not final APK sizes. Build type, compression, transitive libraries, and included CPU architectures affect the result. An AAB lets Google Play deliver only the device's required architecture, but it does not change a bundled module into an unbundled one.
+
+<details>
+<summary>Why a universal CA15 debug APK can be much larger</summary>
+
+Our universal `cordova-android@15` debug analysis counted approximately 98.5 MB of packaged files attributable to the three bundled dependency trees across multiple ABIs: 37.1 MB for Face Detection, 19.1 MB for Barcode Scanning, and 42.3 MB for Text Recognition. This raw multi-ABI figure is not comparable to Google's per-feature size guidance or a per-device AAB download; it is useful only when analyzing a universal debug APK.
+
+</details>
+
+The plugin modes choose when each implementation becomes available:
+
+| Mode | Implementation | Download timing | Best fit |
 | --- | --- | --- | --- |
-| `bundled` | Immediate offline first use | Larger APK/AAB; model updates require a new app build | ~98.5 MB for all three in a universal APK; ~21–33 MB in a single-ABI/AAB device delivery |
-| `install-time` (**default**) | Smaller app; requests the selected module after Play Store installation | Best-effort prefetch; it may not be ready when the app opens and sideloaded APKs must not rely on it | Bundled model payload avoided; a small client library remains |
-| `first-use` | Smaller app; no module is downloaded unless its API is used | First use needs compatible Google Play services, storage, network, and download time | Bundled model payload avoided; a small client library remains |
+| `install-time` (**default**) | Unbundled | Requested after installation from Google Play; completion is best effort. | Small app with proactive delivery for normal Play Store installs. |
+| `first-use` | Unbundled | Downloaded when the app first calls that module, unless prepared earlier. | Small app where unused modules should never download. |
+| `bundled` | Bundled | Included in the APK/AAB; no model download. | Immediate offline availability is more important than package size. |
 
-The bundled figures above are compressed-payload measurements from the current `cordova-android@15` debug APK using Face Detection `16.1.7`, Barcode Scanning `17.2.0`, and Text Recognition `16.0.1`. The universal APK contains approximately 37.1 MB of Face Detection files, 19.1 MB of Barcode Scanning files, and 42.3 MB of Text Recognition files. They total approximately 98.5 MB (93.9 MiB). A per-device AAB delivery retains one native ABI, reducing the combined model payload to roughly 21–33 MB depending on the device architecture. These figures estimate the incremental packaged files, not the final application size, and can change with dependency updates, ABI selection, compression, and release optimization.
-
-Google Play services can update its managed ML models/modules independently. It does not replace the Java client-library versions selected by this plugin at build time.
+Google Play services can update its managed models independently. It does not replace the Java client-library versions selected by this plugin at build time.
 
 ### Play services download timing
 
@@ -206,7 +236,7 @@ The result describes `face`, `barcode`, `document`, and `text`. On Android, each
 
 ## Document scanning
 
-`MlKit.scanDocument(options)` opens the Google ML Kit Document Scanner on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
+`MlKit.scanDocument(options)` opens the [Google ML Kit Document Scanner](https://developers.google.com/ml-kit/vision/doc-scanner) on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
 
 The scanner UI, logic, and models are an on-demand Google Play services component. `scanDocument()` now prepares that component automatically and shows the native loading indicator only when a download is required. Call `prepareDocumentScanner()` earlier only when proactive preparation better suits the application flow:
 
@@ -277,7 +307,7 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
 
 ## Text recognition
 
-`MlKit.recognizeText(imagePath, options?)` runs the Latin text recognizer selected by the Android delivery mode against a local image and resolves to one plain string. iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
+`MlKit.recognizeText(imagePath, options?)` runs [ML Kit Text Recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2) for the Latin script against a local image and resolves to one plain string. Android uses the selected delivery mode; iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
 
 ```javascript
 const text = await MlKit.recognizeText(result.pages[0].imagePath, {
@@ -290,7 +320,7 @@ console.log(text);
 
 ## Barcode detection in an image
 
-`MlKit.scanBarcodes(imagePath, options)` analyzes one existing local image and resolves to an array. It does not require the camera UI or two-frame confirmation.
+`MlKit.scanBarcodes(imagePath, options)` uses [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) to analyze one existing local image and resolves to an array. It does not require the camera UI or two-frame confirmation.
 
 ```javascript
 const barcodes = await MlKit.scanBarcodes(imagePath, {
@@ -307,7 +337,7 @@ Omit `formats` to enable every supported format. `moduleLoadingMessage` follows 
 
 ## Camera barcode scanning
 
-`MlKit.barcode.scan(options)` opens a full-screen rear-camera scanner on Android and iOS:
+`MlKit.barcode.scan(options)` combines [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) with the plugin's own full-screen rear-camera UI on Android and iOS:
 
 ```javascript
 const result = await MlKit.barcode.scan({
@@ -361,7 +391,7 @@ Both barcode methods support all 13 formats exposed by ML Kit Barcode Scanning:
 
 ## Face capture
 
-`MlKit.face.capture(options)` opens a full-screen native front-camera view and resolves after a valid JPEG is captured:
+`MlKit.face.capture(options)` combines [ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) with a full-screen native front-camera guide and resolves after a valid JPEG is captured:
 
 ```javascript
 const result = await MlKit.face.capture({
