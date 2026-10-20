@@ -94,36 +94,39 @@ final class BarcodeScanViewController: UIViewController {
     }
 
     private func addCloseButton() {
-        let button = cameraButton(title: "Close")
+        let button = cameraIconButton(systemName: "xmark", accessibilityLabel: "Close barcode scanner")
         button.addTarget(self, action: #selector(cancelByUser), for: .touchUpInside)
         view.addSubview(button)
         NSLayoutConstraint.activate([
             button.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 64),
+            button.widthAnchor.constraint(equalToConstant: 44),
             button.heightAnchor.constraint(equalToConstant: 44)
         ])
     }
 
     private func addTorchButton() {
-        let button = cameraButton(title: "Torch off")
+        let button = cameraIconButton(systemName: "bolt.fill", accessibilityLabel: "Turn torch on")
         button.isHidden = true
         button.addTarget(self, action: #selector(toggleTorch), for: .touchUpInside)
         view.addSubview(button)
         NSLayoutConstraint.activate([
             button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 88),
+            button.widthAnchor.constraint(equalToConstant: 44),
             button.heightAnchor.constraint(equalToConstant: 44)
         ])
         torchButton = button
     }
 
-    private func cameraButton(title: String) -> UIButton {
+    private func cameraIconButton(systemName: String, accessibilityLabel: String) -> UIButton {
         let button = UIButton(type: .system)
-        button.setTitle(title, for: .normal)
-        button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
+        button.setImage(UIImage(systemName: systemName, withConfiguration: configuration), for: .normal)
+        button.tintColor = UIColor(red: 0.48, green: 0.52, blue: 0.59, alpha: 1)
+        button.backgroundColor = UIColor.white.withAlphaComponent(0.96)
+        button.layer.cornerRadius = 22
+        button.accessibilityLabel = accessibilityLabel
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }
@@ -220,7 +223,11 @@ final class BarcodeScanViewController: UIViewController {
                 camera.unlockForConfiguration()
                 locked = false
                 DispatchQueue.main.async {
-                    self?.torchButton?.setTitle(enabled ? "Torch on" : "Torch off", for: .normal)
+                    self?.torchButton?.tintColor = enabled
+                        ? UIColor(red: 0.98, green: 0.74, blue: 0.02, alpha: 1)
+                        : UIColor(red: 0.48, green: 0.52, blue: 0.59, alpha: 1)
+                    self?.torchButton?.accessibilityLabel = enabled
+                        ? "Turn torch off" : "Turn torch on"
                 }
             } catch {
                 if locked { camera.unlockForConfiguration() }

@@ -11,8 +11,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -50,7 +50,7 @@ public final class BarcodeScanActivity extends Activity
     private BarcodeScanConfig config;
     private PreviewView previewView;
     private BarcodeOverlayView overlayView;
-    private Button torchButton;
+    private ImageButton torchButton;
     private ProcessCameraProvider cameraProvider;
     private ImageAnalysis imageAnalysis;
     private BarcodeFrameAnalyzer analyzer;
@@ -134,34 +134,37 @@ public final class BarcodeScanActivity extends Activity
         root.addView(overlayView, matchParent());
 
         if (config.showCloseButton) {
-            Button close = cameraButton("Close");
+            ImageButton close = cameraIconButton(
+                BarcodeIconDrawable.CLOSE, "Close barcode scanner", false
+            );
             close.setOnClickListener(view -> cancelByUser());
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(100), dp(52));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(52), dp(52));
             params.gravity = Gravity.TOP | Gravity.START;
             params.topMargin = dp(12);
-            params.leftMargin = dp(8);
+            params.leftMargin = dp(12);
             root.addView(close, params);
         }
 
         if (config.showTorchButton) {
-            torchButton = cameraButton("Torch off");
+            torchButton = cameraIconButton(
+                BarcodeIconDrawable.TORCH, "Turn torch on", false
+            );
             torchButton.setVisibility(View.GONE);
             torchButton.setOnClickListener(view -> toggleTorch());
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(112), dp(52));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(52), dp(52));
             params.gravity = Gravity.TOP | Gravity.END;
             params.topMargin = dp(12);
-            params.rightMargin = dp(8);
+            params.rightMargin = dp(12);
             root.addView(torchButton, params);
         }
         setContentView(root);
     }
 
-    private Button cameraButton(String text) {
-        Button button = new Button(this);
-        button.setText(text);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(16);
-        button.setAllCaps(false);
+    private ImageButton cameraIconButton(int icon, String description, boolean active) {
+        ImageButton button = new ImageButton(this);
+        button.setImageDrawable(new BarcodeIconDrawable(icon, active));
+        button.setContentDescription(description);
+        button.setPadding(0, 0, 0, 0);
         button.setBackgroundColor(Color.TRANSPARENT);
         return button;
     }
@@ -208,7 +211,10 @@ public final class BarcodeScanActivity extends Activity
         if (camera == null || !camera.getCameraInfo().hasFlashUnit()) return;
         torchEnabled = !torchEnabled;
         camera.getCameraControl().enableTorch(torchEnabled);
-        torchButton.setText(torchEnabled ? "Torch on" : "Torch off");
+        torchButton.setImageDrawable(new BarcodeIconDrawable(
+            BarcodeIconDrawable.TORCH, torchEnabled
+        ));
+        torchButton.setContentDescription(torchEnabled ? "Turn torch off" : "Turn torch on");
     }
 
     @Override

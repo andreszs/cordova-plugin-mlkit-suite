@@ -587,6 +587,7 @@ Before release, validate installation and a debug build with each supported Cord
 - Added `MlKit.barcode.scan(options)` on Android and iOS using ML Kit Barcode Scanning.
 - Added high-resolution CameraX and AVFoundation analysis, rear-camera preview, optional torch control, and two-frame barcode confirmation.
 - Added a four-color camera guide with optional `guideColor` override and restricted live results to barcodes fully contained inside it.
+- Replaced live barcode text controls with accessible circular close and torch icon buttons.
 - Kept all document and barcode payload handling generic and country-agnostic.
 - Added the extensible `MlKit` namespace and capability discovery.
 - Added `MlKit.face.capture(options)` for Android and iOS.

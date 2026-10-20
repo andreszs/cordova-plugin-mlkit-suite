@@ -30,6 +30,8 @@ assert(controller.includes('Center the barcode inside the frame'));
 assert(controller.includes('overlayView.contains('));
 assert(types.includes('guideColor must be a color in #RRGGBB format.'));
 assert(controller.includes('setTorchModeOn'));
+assert(controller.includes('UIImage(systemName: systemName'));
+assert(controller.includes('accessibilityLabel'));
 assert(types.includes('"PDF_417"'));
 assert(types.includes('"QR_CODE"'));
 
