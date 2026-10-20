@@ -46,7 +46,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) {
         if ("getCapabilities".equals(action)) {
-            callbackContext.success(capabilities());
+            getCapabilities(callbackContext);
             return true;
         }
         if ("recognizeText".equals(action)) {
@@ -273,11 +273,13 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             face.put("autoCapture", true);
             face.put("mode", faceMode);
             face.put("bundled", "bundled".equals(faceMode));
+            putInitialModelStatus(face, faceMode);
             root.put("barcode", barcode);
             barcode.put("scan", true);
             barcode.put("scanImage", true);
             barcode.put("mode", barcodeMode);
             barcode.put("bundled", "bundled".equals(barcodeMode));
+            putInitialModelStatus(barcode, barcodeMode);
             barcode.put("resolution", "1920x1080");
             barcode.put("confirmationFrames", 2);
             barcode.put("formats", BarcodeScanConfig.supportedFormatsJson());
@@ -290,15 +292,79 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             );
             document.put("minimumAndroidApi", 24);
             document.put("dynamicallyDelivered", true);
+            document.put("mode", "play-services");
             document.put("minimumTotalRamMb", 1700);
             document.put("resultFormats", new JSONArray().put("JPEG").put("PDF"));
+            if (document.optBoolean("deviceSupported")) {
+                putRuntimeModelStatus(document, null);
+            } else {
+                document.put("ready", false);
+                document.put("modelStatus", "unsupported");
+            }
             root.put("text", text);
             text.put("recognize", true);
             text.put("mode", ocrMode);
             text.put("bundled", "bundled".equals(ocrMode));
+            putInitialModelStatus(text, ocrMode);
             text.put("scripts", new JSONArray().put("LATIN"));
         } catch (Exception ignored) { }
         return root;
+    }
+
+    private void getCapabilities(CallbackContext callbackContext) {
+        JSONObject result = capabilities();
+        JSONObject face = result.optJSONObject("face");
+        JSONObject barcode = result.optJSONObject("barcode");
+        JSONObject text = result.optJSONObject("text");
+        boolean checkFace = face != null && !face.optBoolean("bundled");
+        boolean checkBarcode = barcode != null && !barcode.optBoolean("bundled");
+        boolean checkText = text != null && !text.optBoolean("bundled");
+        Activity activity = cordova.getActivity();
+
+        activity.runOnUiThread(() -> MlKitModelsModuleInstaller.checkAvailability(
+            activity, checkFace, checkBarcode, checkText, availability -> {
+                mergeRuntimeModelStatus(face, availability.optJSONObject("face"));
+                mergeRuntimeModelStatus(barcode, availability.optJSONObject("barcode"));
+                mergeRuntimeModelStatus(text, availability.optJSONObject("text"));
+                JSONObject document = result.optJSONObject("document");
+                if (document == null || !document.optBoolean("deviceSupported")) {
+                    callbackContext.success(result);
+                    return;
+                }
+                DocumentScannerModuleInstaller.checkAvailability(activity, ready -> {
+                    putRuntimeModelStatus(document, ready);
+                    callbackContext.success(result);
+                });
+            }
+        ));
+    }
+
+    private static void putInitialModelStatus(JSONObject module, String mode) {
+        if ("bundled".equals(mode)) {
+            try {
+                module.put("ready", true);
+                module.put("modelStatus", "bundled");
+            } catch (Exception ignored) { }
+        } else {
+            putRuntimeModelStatus(module, null);
+        }
+    }
+
+    private static void mergeRuntimeModelStatus(JSONObject module, JSONObject availability) {
+        if (module == null || availability == null) return;
+        try {
+            module.put("ready", availability.opt("ready"));
+            module.put("modelStatus", availability.optString("modelStatus", "unknown"));
+        } catch (Exception ignored) { }
+    }
+
+    private static void putRuntimeModelStatus(JSONObject module, Boolean ready) {
+        if (module == null) return;
+        try {
+            module.put("ready", ready == null ? JSONObject.NULL : ready);
+            module.put("modelStatus", ready == null
+                ? "unknown" : ready ? "downloaded" : "not-ready");
+        } catch (Exception ignored) { }
     }
 
     private String androidModuleMode(String metadataName) {

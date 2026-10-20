@@ -22,7 +22,20 @@ final class DocumentScannerModuleInstaller {
         void onError(JSONObject error);
     }
 
+    interface AvailabilityCallback {
+        void onResult(Boolean ready);
+    }
+
     private DocumentScannerModuleInstaller() { }
+
+    static void checkAvailability(Activity activity, AvailabilityCallback callback) {
+        GmsDocumentScanner scanner = GmsDocumentScanning.getClient(
+            new GmsDocumentScannerOptions.Builder().build()
+        );
+        ModuleInstall.getClient(activity).areModulesAvailable(scanner)
+            .addOnSuccessListener(response -> callback.onResult(response.areModulesAvailable()))
+            .addOnFailureListener(error -> callback.onResult(null));
+    }
 
     static void prepare(Activity activity, String loadingMessage, Callback callback) {
         GmsDocumentScanner scanner = GmsDocumentScanning.getClient(

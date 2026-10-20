@@ -31,25 +31,34 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "frontCamera": true,
                 "autoCapture": true,
                 "mode": "bundled",
-                "bundled": true
+                "bundled": true,
+                "ready": true,
+                "modelStatus": "bundled"
             ],
             "barcode": [
                 "scan": true,
                 "scanImage": true,
                 "mode": "bundled",
                 "bundled": true,
+                "ready": true,
+                "modelStatus": "bundled",
                 "resolution": "1920x1080",
                 "confirmationFrames": 2,
                 "formats": BarcodeFormatSupport.names
             ],
             "document": [
                 "scan": false,
-                "prepare": false
+                "prepare": false,
+                "mode": "unsupported",
+                "ready": false,
+                "modelStatus": "unsupported"
             ],
             "text": [
                 "recognize": true,
                 "mode": "bundled",
                 "bundled": true,
+                "ready": true,
+                "modelStatus": "bundled",
                 "scripts": ["LATIN"]
             ]
         ]

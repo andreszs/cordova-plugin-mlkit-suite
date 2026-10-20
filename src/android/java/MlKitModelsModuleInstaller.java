@@ -23,6 +23,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 final class MlKitModelsModuleInstaller {
     interface Callback {
@@ -30,7 +31,68 @@ final class MlKitModelsModuleInstaller {
         void onError(JSONObject error);
     }
 
+    interface AvailabilityCallback {
+        void onResult(JSONObject result);
+    }
+
     private MlKitModelsModuleInstaller() { }
+
+    static void checkAvailability(Activity activity, boolean includeFace, boolean includeBarcode,
+                                  boolean includeText, AvailabilityCallback callback) {
+        JSONObject result = new JSONObject();
+        int requestedCount = (includeFace ? 1 : 0) + (includeBarcode ? 1 : 0)
+            + (includeText ? 1 : 0);
+        if (requestedCount == 0) {
+            callback.onResult(result);
+            return;
+        }
+
+        ModuleInstallClient client = ModuleInstall.getClient(activity);
+        AtomicInteger remaining = new AtomicInteger(requestedCount);
+        if (includeFace) {
+            FaceDetector face = FaceDetection.getClient(new FaceDetectorOptions.Builder().build());
+            checkOne(client, "face", (OptionalModuleApi) face, face::close,
+                result, remaining, callback);
+        }
+        if (includeBarcode) {
+            BarcodeScanner barcode = BarcodeScanning.getClient();
+            checkOne(client, "barcode", (OptionalModuleApi) barcode, barcode::close,
+                result, remaining, callback);
+        }
+        if (includeText) {
+            TextRecognizer text = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            checkOne(client, "text", (OptionalModuleApi) text, text::close,
+                result, remaining, callback);
+        }
+    }
+
+    private static void checkOne(ModuleInstallClient client, String name, OptionalModuleApi module,
+                                 Runnable closeAction, JSONObject result,
+                                 AtomicInteger remaining, AvailabilityCallback callback) {
+        client.areModulesAvailable(module)
+            .addOnSuccessListener(response -> finishAvailabilityCheck(
+                name, response.areModulesAvailable(), closeAction, result, remaining, callback
+            ))
+            .addOnFailureListener(error -> finishAvailabilityCheck(
+                name, null, closeAction, result, remaining, callback
+            ));
+    }
+
+    private static void finishAvailabilityCheck(String name, Boolean ready, Runnable closeAction,
+                                                JSONObject result, AtomicInteger remaining,
+                                                AvailabilityCallback callback) {
+        closeAction.run();
+        synchronized (result) {
+            try {
+                JSONObject availability = new JSONObject();
+                availability.put("ready", ready == null ? JSONObject.NULL : ready);
+                availability.put("modelStatus", ready == null
+                    ? "unknown" : ready ? "downloaded" : "not-ready");
+                result.put(name, availability);
+            } catch (Exception ignored) { }
+            if (remaining.decrementAndGet() == 0) callback.onResult(result);
+        }
+    }
 
     static void prepare(Activity activity, boolean includeFace, boolean includeBarcode,
                         boolean includeText, String loadingMessage, Callback callback) {

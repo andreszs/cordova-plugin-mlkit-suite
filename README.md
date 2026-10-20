@@ -202,7 +202,7 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 }
 ```
 
-The result describes `face`, `barcode`, `document`, and `text`. On Android, each affected module reports `mode` (`bundled`, `install-time`, or `first-use`) and `bundled`. Root delivery fields can report `mixed`. `offline` remains `false` because the document scanner is always dynamically delivered.
+The result describes `face`, `barcode`, `document`, and `text`. On Android, each affected module reports `mode` (`bundled`, `install-time`, or `first-use`) and `bundled`. It also performs a read-only Google Play services availability check and reports `ready` plus `modelStatus` (`bundled`, `downloaded`, `not-ready`, `unsupported`, or `unknown`) without requesting a download. Root delivery fields can report `mixed`. `offline` remains `false` because the document scanner is always dynamically delivered.
 
 ## Document scanning
 
