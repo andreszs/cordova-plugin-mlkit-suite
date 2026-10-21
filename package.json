@@ -49,6 +49,7 @@
     "plugin.xml",
     "www",
     "src",
+    "docs",
     "tests",
     "README.md",
     "LICENSE"

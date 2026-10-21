@@ -11,6 +11,7 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 
 ## Table of contents
 
+- [Features](#features)
 - [Screenshots](#screenshots)
 - [Compatibility](#compatibility)
 - [Installation](#installation)
@@ -39,6 +40,15 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 - [Tests](#tests)
 - [Changelog](#changelog)
 
+## Features
+
+- **Guided face capture** on Android and iOS, with a front-camera overlay, configurable quality checks, automatic capture, and a local JPEG result.
+- **Barcode scanning** from the live camera or an existing image on Android and iOS, supporting all available barcode formats, configurable format filters, scan-region enforcement, and consecutive-frame confirmation.
+- **Text recognition v2** for extracting Latin-script text from local images on Android and iOS.
+- **Document scanning** on Android, with page limits, scanner modes, gallery import, JPEG pages, and optional PDF output.
+- **Per-module Android delivery**, allowing Face Detection, Barcode Scanning, and Text Recognition to use `bundled`, `install-time`, or `first-use` independently.
+- **Localized native UI and capability reporting**, with automatic, English, and Spanish UI selection, customizable loading messages, and readiness checks that do not trigger a download.
+
 ## Screenshots
 
 <table>
@@ -66,7 +76,7 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 
 ## Compatibility
 
-The Android implementation supports `cordova-android` 12 through 15 and therefore requires Android 7.0 / API 24 or newer. It selects a tested CameraX version from the installed `cordova-android` major version.
+The plugin requires Cordova 11 or newer. The Android implementation supports `cordova-android` 12 through 15 and therefore requires Android 7.0 / API 24 or newer. It selects a tested CameraX version from the installed `cordova-android` major version.
 
 | cordova-android | CameraX | Bundled Face | Bundled Barcode | Bundled OCR | Document Scanner | Reference toolchain |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -113,7 +123,7 @@ cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git \
   --variable ANDROID_MLKIT_BARCODE_MODE=first-use
 ```
 
-The accepted mode values are `bundled`, `install-time`, and `first-use`. The global value `play-services` remains a backward-compatible alias for `install-time`. Available variables are:
+The accepted mode values are `bundled`, `install-time`, and `first-use`. The legacy value `play-services` is also accepted as an alias for `install-time`. Available variables are:
 
 | Variable | Default | Scope |
 | --- | --- | --- |
@@ -193,6 +203,14 @@ await MlKit.prepareModels(["barcode", "ocr"], {
 });
 ```
 
+`prepareModels()` and `prepareDocumentScanner()` resolve with the same result shape:
+
+```json
+{ "status": "ready", "alreadyAvailable": true }
+```
+
+`alreadyAvailable` is `true` when no download was needed and `false` when the call completed a download.
+
 `MlKit.getCapabilities()` reports each module's configured mode and readiness without starting a download. Document Scanner is separate: it is always delivered through Google Play services and can be prepared with `MlKit.prepareDocumentScanner()`.
 
 ## Localization
@@ -215,13 +233,13 @@ The Google Document Scanner UI is owned by Google Play services and follows the 
 | Method | Android | iOS | Purpose |
 | --- | --- | --- | --- |
 | `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
-| `MlKit.prepareModels(modules?, options?)` | yes; Android 7+ | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
+| `MlKit.prepareModels(modules?, options?)` | yes | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
 | `MlKit.prepareDocumentScanner(options?)` | Android 7+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
-| `MlKit.scanDocument(options)` | Android 7+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
+| `MlKit.scanDocument(options?)` | Android 7+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
 | `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
-| `MlKit.scanBarcodes(imagePath, options)` | yes | yes | Returns every matching barcode detected in a local image. |
-| `MlKit.barcode.scan(options)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
-| `MlKit.face.capture(options)` | yes | yes | Opens guided front-camera face capture with automatic capture. |
+| `MlKit.scanBarcodes(imagePath, options?)` | yes | yes | Returns every matching barcode detected in a local image. |
+| `MlKit.barcode.scan(options?)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
+| `MlKit.face.capture(options?)` | yes | yes | Opens guided front-camera face capture with automatic capture. |
 
 All methods return Promises. The plugin processes content locally and does not interpret, validate, upload, or transform decoded payloads for a particular country or document type.
 
@@ -237,11 +255,51 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 }
 ```
 
-The result describes `face`, `barcode`, `document`, and `text`. Its `localization` object reports the supported, device, and currently resolved locales. On Android, each affected module reports `mode` (`bundled`, `install-time`, or `first-use`) and `bundled`. It also performs a read-only Google Play services availability check and reports `ready` plus `modelStatus` (`bundled`, `downloaded`, `not-ready`, `unsupported`, or `unknown`) without requesting a download. Root delivery fields can report `mixed`. `offline` remains `false` because the document scanner is always dynamically delivered.
+The exact shape on a supported Android device using the default `install-time` mode is:
+
+```json
+{
+  "platform": "android",
+  "offline": false,
+  "modelDelivery": "play-services",
+  "modelDownloadStrategy": "install-time",
+  "localization": {
+    "default": "auto",
+    "supportedLocales": ["en", "es"],
+    "deviceLocale": "es-AR",
+    "resolvedLocale": "es"
+  },
+  "face": {
+    "capture": true, "frontCamera": true, "autoCapture": true,
+    "mode": "install-time", "bundled": false,
+    "ready": true, "modelStatus": "downloaded"
+  },
+  "barcode": {
+    "scan": true, "scanImage": true,
+    "mode": "install-time", "bundled": false,
+    "ready": true, "modelStatus": "downloaded",
+    "resolution": "1920x1080", "confirmationFrames": 2,
+    "formats": ["AZTEC", "CODABAR", "CODE_39", "CODE_93", "CODE_128", "DATA_MATRIX", "EAN_8", "EAN_13", "ITF", "PDF_417", "QR_CODE", "UPC_A", "UPC_E"]
+  },
+  "document": {
+    "scan": true, "prepare": true, "deviceSupported": true,
+    "minimumAndroidApi": 24, "dynamicallyDelivered": true,
+    "mode": "play-services", "minimumTotalRamMb": 1700,
+    "resultFormats": ["JPEG", "PDF"],
+    "ready": true, "modelStatus": "downloaded"
+  },
+  "text": {
+    "recognize": true, "mode": "install-time", "bundled": false,
+    "ready": true, "modelStatus": "downloaded", "scripts": ["LATIN"]
+  }
+}
+```
+
+Locale and readiness values vary at runtime. A read-only Google Play services check supplies `ready` (`true`, `false`, or `null`) and `modelStatus` (`bundled`, `downloaded`, `not-ready`, `unsupported`, or `unknown`) without starting a download. Root delivery fields report `mixed` when module modes differ. Android reports `offline: false` because Document Scanner is dynamically delivered. iOS reports bundled Face, Barcode, and Text modules with `offline: true`; its `document` object reports `scan: false`, `prepare: false`, `mode: "unsupported"`, `ready: false`, and `modelStatus: "unsupported"`.
 
 ## Document scanning
 
-`MlKit.scanDocument(options)` opens the [Google ML Kit Document Scanner](https://developers.google.com/ml-kit/vision/doc-scanner) on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
+`MlKit.scanDocument(options?)` opens the [Google ML Kit Document Scanner](https://developers.google.com/ml-kit/vision/doc-scanner) on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
 
 The scanner UI, logic, and models are an on-demand Google Play services component. `scanDocument()` now prepares that component automatically and shows the native loading indicator only when a download is required. Call `prepareDocumentScanner()` earlier only when proactive preparation better suits the application flow:
 
@@ -274,8 +332,8 @@ The method performs device checks before requesting the Google scanner. Android 
 | --- | --- | --- | --- |
 | `pageLimit` | integer `1–100` | `1` | Maximum number of pages in one scan. |
 | `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
-| `resultFormats` | `string[] \| string` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `JPG` aliases `JPEG`. |
-| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL"` | `"FULL"` | Selects the native editing feature set. `BASE` still includes crop, rotation, page removal, and page reordering. |
+| `resultFormats` | `string[] \| string \| null` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `null` uses the default; `JPG` aliases `JPEG`. |
+| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL" \| null` | `"FULL"` | Selects the native editing feature set. `null` uses the default. `BASE` still includes crop, rotation, page removal, and page reordering. |
 | `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading the scanner component. Empty string shows only the spinner. |
 | `locale` | `string` | `"auto"` | Plugin loading/error locale. Google's scanner UI resolves its own locale. |
 
@@ -288,7 +346,7 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
   "status": "success",
   "pages": [
     {
-      "imagePath": "/private/cache/mlkit-suite/document-...-page-1.jpg",
+      "imagePath": "/data/user/0/<app-id>/cache/mlkit-suite/document-...-page-1.jpg",
       "imageUri": "https://localhost/_mlkit_suite_image_/document-...-page-1.jpg",
       "mimeType": "image/jpeg",
       "bytes": 182734,
@@ -297,7 +355,7 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
     }
   ],
   "pdf": {
-    "path": "/private/cache/mlkit-suite/document-....pdf",
+    "path": "/data/user/0/<app-id>/cache/mlkit-suite/document-....pdf",
     "uri": "https://localhost/_mlkit_suite_document_/document-....pdf",
     "mimeType": "application/pdf",
     "bytes": 251809,
@@ -306,7 +364,7 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
 }
 ```
 
-`pages` is empty when JPEG was not requested. `pdf` is `null` when PDF was not requested. Use `imageUri` for an `<img>` inside the Cordova WebView. Native paths are intended for APIs such as `recognizeText()` and `scanBarcodes()`.
+`pages` is empty when JPEG was not requested. `pdf` is `null` when PDF was not requested. Use `imageUri` for an `<img>` inside the Cordova WebView; its scheme and hostname follow the host application's Cordova configuration. Native paths are intended for APIs such as `recognizeText()` and `scanBarcodes()`.
 
 ## Text recognition
 
@@ -323,7 +381,7 @@ console.log(text);
 
 ## Barcode detection in an image
 
-`MlKit.scanBarcodes(imagePath, options)` uses [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) to analyze one existing local image and resolves to an array. It does not require the camera UI or two-frame confirmation.
+`MlKit.scanBarcodes(imagePath, options?)` uses [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) to analyze one existing local image and resolves to an array. It does not require the camera UI or two-frame confirmation.
 
 ```javascript
 const barcodes = await MlKit.scanBarcodes(imagePath, {
@@ -338,9 +396,28 @@ for (const barcode of barcodes) {
 
 Omit `formats` to enable every supported format. `moduleLoadingMessage` follows the common native-indicator rules above. Each detected value includes `text`, `format`, numeric `valueType`, `boundingBox`, and `cornerPoints`. An image containing no matching barcode resolves to `[]`.
 
+```json
+[
+  {
+    "text": "https://example.com",
+    "format": "QR_CODE",
+    "valueType": 8,
+    "boundingBox": { "x": 120, "y": 84, "width": 420, "height": 418 },
+    "cornerPoints": [
+      { "x": 120, "y": 84 },
+      { "x": 540, "y": 84 },
+      { "x": 540, "y": 502 },
+      { "x": 120, "y": 502 }
+    ]
+  }
+]
+```
+
+`boundingBox` can be `null`; `cornerPoints` can be empty. Coordinates use the source image's pixel coordinate system. `valueType` is the platform ML Kit enum value, and `format` is one of the names below or `UNKNOWN` if the native SDK reports an unrecognized value.
+
 ## Camera barcode scanning
 
-`MlKit.barcode.scan(options)` combines [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) with the plugin's own full-screen rear-camera UI on Android and iOS:
+`MlKit.barcode.scan(options?)` combines [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) with the plugin's own full-screen rear-camera UI on Android and iOS:
 
 ```javascript
 const result = await MlKit.barcode.scan({
@@ -356,6 +433,10 @@ const result = await MlKit.barcode.scan({
 if (result.status === "success") {
     console.log(result.text, result.format);
 }
+```
+
+```json
+{ "status": "success", "text": "https://example.com", "format": "QR_CODE" }
 ```
 
 Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. The four-color corner guide is the active scan region: codes outside it or crossing its edges are ignored. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format while fully inside the guide. A missing, outside, or different value resets confirmation.
@@ -395,7 +476,7 @@ Both barcode methods support all 13 formats exposed by ML Kit Barcode Scanning:
 
 ## Face capture
 
-`MlKit.face.capture(options)` combines [ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) with a full-screen native front-camera guide and resolves after a valid JPEG is captured:
+`MlKit.face.capture(options?)` combines [ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) with a full-screen native front-camera guide and resolves after a valid JPEG is captured:
 
 ```javascript
 const result = await MlKit.face.capture({
@@ -457,8 +538,8 @@ Capture starts automatically only after all enabled checks remain acceptable for
 ```json
 {
   "status": "success",
-  "imageUri": "https://localhost/_mlkit_suite_image_/face-...jpg",
-  "imagePath": "/private/cache/mlkit-suite/face-...jpg",
+  "imageUri": "<cordova-scheme>://<hostname>/_mlkit_suite_image_/face-...jpg",
+  "imagePath": "<app-cache>/mlkit-suite/face-...jpg",
   "width": 600,
   "height": 720,
   "mimeType": "image/jpeg",
@@ -487,7 +568,9 @@ Capture starts automatically only after all enabled checks remain acceptable for
 }
 ```
 
-Cache files are temporary and may be removed by the operating system.
+`imageUri` uses the host application's configured Cordova scheme and hostname. Cache files are temporary and may be removed by the operating system.
+
+Eye-open and smiling probabilities can be `null` when ML Kit does not provide them for the captured face.
 
 ## Cancellation and errors
 
@@ -522,6 +605,7 @@ Other failures reject with a stable shape:
 | `UNSUPPORTED_DEVICE` | The current Android version, memory, or Google implementation does not support the document scanner. |
 | `UNSUPPORTED_PLATFORM` | The requested module is not implemented on the current platform. |
 | `TIMEOUT` | The configured interactive-session timeout elapsed. |
+| `UNKNOWN` | The JavaScript bridge received an unstructured or otherwise unknown native error. |
 
 ## Dependencies and licenses
 

@@ -22,6 +22,8 @@ import java.io.File;
 import java.util.List;
 
 final class StaticImageProcessor {
+    private static final String IMAGE_WEB_PATH = "/_mlkit_suite_image_/";
+
     private StaticImageProcessor() { }
 
     static void recognizeText(Context context, String rawPath, File cacheDirectory,
@@ -88,9 +90,12 @@ final class StaticImageProcessor {
         }
         String value = rawPath.trim();
         Uri uri;
-        if (value.startsWith("https://localhost/_mlkit_suite_image_/")
-            || value.startsWith("http://localhost/_mlkit_suite_image_/")) {
-            String name = value.substring(value.lastIndexOf('/') + 1).split("\\?", 2)[0];
+        Uri parsed = Uri.parse(value);
+        if (parsed.getPath() != null && parsed.getPath().startsWith(IMAGE_WEB_PATH)) {
+            String name = parsed.getLastPathSegment();
+            if (name == null || name.isEmpty()) {
+                throw new IllegalArgumentException("Plugin image is unavailable.");
+            }
             File file = new File(cacheDirectory, name).getCanonicalFile();
             if (!cacheDirectory.getCanonicalFile().equals(file.getParentFile()) || !file.isFile()) {
                 throw new IllegalArgumentException("Plugin image is unavailable.");
