@@ -85,18 +85,38 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 
 ## Compatibility
 
-The plugin requires Cordova 11 or newer. The Android implementation supports `cordova-android` 12 through 15 and therefore requires Android 7.0 / API 24 or newer. It selects a tested CameraX version from the installed `cordova-android` major version.
+The plugin requires Cordova 11 or newer.
 
-| cordova-android | CameraX | Bundled Face | Bundled Barcode | Bundled OCR | Document Scanner | Reference toolchain |
-| --- | --- | --- | --- | --- | --- | --- |
-| 12.x | 1.2.3 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 33 / AGP 7.4.2 / JDK 11 |
-| 13.x | 1.4.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 34 / AGP 8.3.0 / JDK 17 |
-| 14.x | 1.5.2 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 35 / AGP 8.7.3 / JDK 17 |
-| 15.x | 1.6.0 | 16.1.7 | 17.2.0 | 16.0.1 | 16.0.0 | compileSdk 36 / AGP 8.10.1 / JDK 17 |
+| Platform | Supported Cordova platform | Minimum OS |
+| --- | --- | --- |
+| Android | `cordova-android` 12.x–15.x | Android 7.0 / API 24 |
+| iOS | `cordova-ios` 8.x | iOS 15.5 |
 
-All Android delivery modes share the API 24 floor. Face, Barcode, and OCR can select their delivery modes independently; all default to `install-time`. The Android document-scanner UI and model are always delivered dynamically by Google Play services, require at least 1.7 GB of total RAM, and can require a first-use download. On an unsupported device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE`; the other modules remain available. See [Android model delivery](#android-model-delivery) for the delivery strategies. Unknown Cordova Android toolchains fail at build time instead of silently selecting untested versions.
+### Module availability
 
-The current Android Google Play services clients are Face Detection `17.1.0`, Barcode Scanning `18.3.1`, and Text Recognition `19.0.1`. The iOS implementation supports `cordova-ios` 8.x and requires iOS 15.5 or newer. Face capture, live and still-image barcode detection, and Latin text recognition use Google ML Kit CocoaPods `8.0.0`. Google does not provide the ML Kit Document Scanner API for iOS; document-scanner methods reject with `UNSUPPORTED_PLATFORM` there.
+| Module | Android | iOS |
+| --- | --- | --- |
+| Barcode scanning | ✅ Live camera and still images | ✅ Live camera and still images |
+| Document scanner | ✅ Available | ❌ Not available |
+| Face detection | ✅ Guided face capture | ✅ Guided face capture |
+| Text recognition v2 | ✅ Latin script | ✅ Latin script |
+
+### Android compatibility notes
+
+Document Scanner on Android additionally requires Google Play services and at least 1.7 GB of total RAM.
+
+The Android implementation selects a tested CameraX version for each supported `cordova-android` major:
+
+| cordova-android | CameraX | Reference toolchain |
+| --- | --- | --- |
+| 12.x | 1.2.3 | compileSdk 33 / AGP 7.4.2 / JDK 11 |
+| 13.x | 1.4.2 | compileSdk 34 / AGP 8.3.0 / JDK 17 |
+| 14.x | 1.5.2 | compileSdk 35 / AGP 8.7.3 / JDK 17 |
+| 15.x | 1.6.0 | compileSdk 36 / AGP 8.10.1 / JDK 17 |
+
+Unknown `cordova-android` majors fail at build time instead of silently selecting untested dependencies. On an unsupported Android device, `MlKit.scanDocument()` rejects with `UNSUPPORTED_DEVICE` without affecting the other modules.
+
+Model packaging and download behavior are documented separately under [Android model delivery](#android-model-delivery).
 
 ## Installation
 
