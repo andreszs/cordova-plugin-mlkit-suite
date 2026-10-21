@@ -38,7 +38,6 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 - [Privacy](#privacy)
 - [Known limitations](#known-limitations)
 - [Tests](#tests)
-- [Changelog](#changelog)
 
 ## Features
 
@@ -639,17 +638,3 @@ npm test
 ```
 
 Before release, validate installation and a debug build with each supported Cordova Android major. Build iOS with `cordova-ios` 8.x on macOS, then test the native flows on physical devices.
-
-## Changelog
-
-### 0.1.0
-
-- Initial Android and iOS release; requires Android 7/API 24 with `cordova-android` 12–15, or iOS 15.5 with `cordova-ios` 8.
-- Added per-module Android `bundled`, `install-time`, and `first-use` delivery, capability reporting, proactive preparation, and localizable loading indicators.
-- Added Android Document Scanner with device checks and structured unsupported-device handling.
-- Added cross-platform Latin text recognition and still-image barcode detection.
-- Added cross-platform live barcode scanning with high-resolution camera input, format filtering, torch, an active guide region, and two-frame confirmation.
-- Added guided front-camera face capture with configurable quality checks, final-still validation, exact output sizing, and cache URLs.
-- Kept document and barcode payload handling generic and country-agnostic.
-- Added strict option validation, structured errors, privacy metadata, and contract tests.
-- Added native runtime localization with automatic locale resolution, per-call overrides, and English/Spanish resources.
