@@ -43,24 +43,24 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 
 <table>
   <tr>
+    <th>Demo tour</th>
     <th>Face capture</th>
     <th>Barcode scanning</th>
-    <th>Document scanning</th>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/demo-tour.gif" alt="ML Kit Suite demo tour" width="260"></td>
     <td><img src="docs/screenshots/face-capture.png" alt="Guided face capture" width="260"></td>
     <td><img src="docs/screenshots/barcode-scanning.png" alt="Live barcode scanning" width="260"></td>
-    <td><img src="docs/screenshots/document-scanning.png" alt="Native document scanning" width="260"></td>
   </tr>
   <tr>
+    <th>Document scanning</th>
     <th>Text recognition</th>
     <th>Capabilities</th>
-    <th></th>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/document-scanning.jpg" alt="Native document scanning result" width="260"></td>
     <td><img src="docs/screenshots/text-recognition.jpg" alt="Text recognition result" width="260"></td>
     <td><img src="docs/screenshots/capabilities.jpg" alt="Module capabilities and readiness" width="260"></td>
-    <td></td>
   </tr>
 </table>
 
