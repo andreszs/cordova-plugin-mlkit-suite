@@ -609,7 +609,7 @@ Other failures reject with a stable shape:
 
 ## Dependencies and licenses
 
-The plugin uses Google ML Kit, [AndroidX CameraX](https://developer.android.com/media/camera/camerax), and Apple system frameworks including AVFoundation. Plugin source is licensed under Apache License 2.0; platform dependencies retain their own licenses and terms.
+The plugin uses Google ML Kit, [AndroidX CameraX](https://developer.android.com/media/camera/camerax), and Apple system frameworks including AVFoundation. Plugin source is licensed under the MIT License; platform dependencies retain their own licenses and terms.
 
 ## Privacy
 

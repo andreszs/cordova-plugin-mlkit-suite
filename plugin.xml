@@ -6,7 +6,7 @@
         version="0.1.0">
     <name>ML Kit Suite</name>
     <description>Extensible Google ML Kit suite for document, text, barcode, and guided face processing.</description>
-    <license>Apache-2.0</license>
+    <license>MIT</license>
     <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,pdf417,qr-code,camera,camerax,avfoundation</keywords>
 
     <engines>
