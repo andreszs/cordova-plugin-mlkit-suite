@@ -1,4 +1,4 @@
-![npm version](https://img.shields.io/npm/v/cordova-plugin-mlkit-suite) ![GitHub package.json version](https://img.shields.io/github/package-json/v/andreszs/cordova-plugin-mlkit-suite?color=FF6D00&label=main&logo=github)
+![npm downloads](https://img.shields.io/npm/dt/cordova-plugin-mlkit-suite) ![npm version](https://img.shields.io/npm/v/cordova-plugin-mlkit-suite) ![GitHub package.json version](https://img.shields.io/github/package-json/v/andreszs/cordova-plugin-mlkit-suite?color=FF6D00&label=main&logo=github) [![Android and iOS demo](https://img.shields.io/badge/demo-Android%20%7C%20iOS-2ea44f?logo=apachecordova&logoColor=white)](https://github.com/andreszs/cordova-plugin-demos/tree/main/com.andreszs.mlkit.suite.demo) ![GitHub license](https://img.shields.io/github/license/andreszs/cordova-plugin-mlkit-suite) ![GitHub last commit](https://img.shields.io/github/last-commit/andreszs/cordova-plugin-mlkit-suite)
 
 <img src="docs/mlkit-logo.svg" alt="ML Kit logo" width="64" align="right">
 
