@@ -7,7 +7,7 @@
 Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. Version `0.1.0` includes guided face capture, camera and still-image barcode scanning, Latin text recognition, and the native Android document scanner.
 
 > [!WARNING]
-> This plugin is in active development and has not been published to npm. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
+> This plugin is in active development. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
 
 ## Table of contents
 
@@ -94,30 +94,30 @@ The current Android Google Play services clients are Face Detection `17.1.0`, Ba
 > [!IMPORTANT]
 > Choose the Android modes in the install command. By default all three modules use the smaller Google Play services `install-time` mode. No plugin, Gradle, XML, manifest, or generated Android file needs to be edited.
 
-Until an npm release is published, install directly from GitHub. Run the selected command from the Cordova application root.
+Run the selected command from the Cordova application root. Cordova resolves `cordova-plugin-mlkit-suite` from the public npm registry.
 
 Default — all modules use `install-time`:
 
 ```bash
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git
+cordova plugin add cordova-plugin-mlkit-suite
 ```
 
 Apply one mode to Face, Barcode, and OCR with `ANDROID_MLKIT_MODEL_DELIVERY`:
 
 ```bash
 # Package every model in the application.
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git \
+cordova plugin add cordova-plugin-mlkit-suite \
   --variable ANDROID_MLKIT_MODEL_DELIVERY=bundled
 
 # Let each model download when its API is first used.
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git \
+cordova plugin add cordova-plugin-mlkit-suite \
   --variable ANDROID_MLKIT_MODEL_DELIVERY=first-use
 ```
 
 Override individual modules when a mixed configuration is preferable. A module-specific value has priority over the global value; `inherit` or an omitted module variable uses the global value:
 
 ```bash
-cordova plugin add https://github.com/andreszs/cordova-plugin-mlkit-suite.git \
+cordova plugin add cordova-plugin-mlkit-suite \
   --variable ANDROID_MLKIT_MODEL_DELIVERY=install-time \
   --variable ANDROID_MLKIT_FACE_MODE=bundled \
   --variable ANDROID_MLKIT_BARCODE_MODE=first-use
@@ -132,7 +132,7 @@ The accepted mode values are `bundled`, `install-time`, and `first-use`. The leg
 | `ANDROID_MLKIT_BARCODE_MODE` | `inherit` | Barcode Scanning override |
 | `ANDROID_MLKIT_OCR_MODE` | `inherit` | Latin Text Recognition override |
 
-For a local checkout, replace the GitHub URL with `/absolute/path/to/cordova-plugin-mlkit-suite`. Cordova persists these variables under `cordova.plugins["cordova-plugin-mlkit-suite"].variables` in the **host application's** `package.json`; the plugin reads them while Gradle configures the Android build. Do not manually edit plugin source, `plugins/`, `platforms/android/`, or the generated manifest.
+For a local checkout, replace the package name with `/absolute/path/to/cordova-plugin-mlkit-suite`. Cordova persists these variables under `cordova.plugins["cordova-plugin-mlkit-suite"].variables` in the **host application's** `package.json`; the plugin reads them while Gradle configures the Android build. Do not manually edit plugin source, `plugins/`, `platforms/android/`, or the generated manifest.
 
 Delivery modes are build-time settings. To change them, remove and re-add this plugin with the new variables, then rebuild; editing `package.json` alone does not update an installed native platform.
 
