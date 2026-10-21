@@ -71,6 +71,16 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
     <td><img src="docs/screenshots/text-recognition.jpg" alt="Text recognition result" width="260"></td>
     <td><img src="docs/screenshots/capabilities.jpg" alt="Module capabilities and readiness" width="260"></td>
   </tr>
+  <tr>
+    <th>iOS demo</th>
+    <th>iOS barcode result</th>
+    <th>iOS text recognition</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ios-demo.jpg" alt="ML Kit Suite demo on iOS" width="260"></td>
+    <td><img src="docs/screenshots/ios-barcode-result.jpg" alt="Successful barcode result on iOS" width="260"></td>
+    <td><img src="docs/screenshots/ios-text-recognition.jpg" alt="Text recognition from a rotated gallery image on iOS" width="260"></td>
+  </tr>
 </table>
 
 ## Compatibility
