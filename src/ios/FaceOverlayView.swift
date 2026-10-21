@@ -3,12 +3,15 @@ import UIKit
 final class FaceOverlayView: UIView {
     private let instruction: String
     private let debugMode: Bool
+    private let checks: FaceCaptureChecks
     private var analysis: FaceCaptureAnalysis?
     private var message: String
 
-    init(instruction: String, debugMode: Bool, initialMessage: String) {
+    init(instruction: String, debugMode: Bool, checks: FaceCaptureChecks,
+         initialMessage: String) {
         self.instruction = instruction
         self.debugMode = debugMode
+        self.checks = checks
         self.message = initialMessage
         super.init(frame: .zero)
         backgroundColor = .clear
@@ -64,13 +67,7 @@ final class FaceOverlayView: UIView {
                  font: .systemFont(ofSize: 18, weight: .semibold), color: color)
 
         if debugMode, let analysis = analysis {
-            let values = String(format:
-                "yaw %.1f  pitch %.1f  roll %.1f\nlight %.2f  sharp %.2f  stable %d ms",
-                analysis.yaw, analysis.pitch, analysis.roll, analysis.brightness,
-                analysis.sharpness, analysis.stableDurationMs)
-            drawText(values, centerY: bounds.height - safeAreaInsets.bottom - 68,
-                     font: .monospacedSystemFont(ofSize: 12, weight: .regular),
-                     color: UIColor(white: 0.88, alpha: 1))
+            drawDebugValues(analysis)
         }
     }
 
@@ -94,6 +91,73 @@ final class FaceOverlayView: UIView {
         let size = CGSize(width: max(100, bounds.width - 48), height: 80)
         let rect = CGRect(x: 24, y: centerY - size.height / 2, width: size.width, height: size.height)
         value.draw(in: rect, withAttributes: attributes)
+    }
+
+    private func drawDebugValues(_ analysis: FaceCaptureAnalysis) {
+        let values = NSMutableAttributedString()
+        let font = UIFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let valid = UIColor(red: 0.29, green: 0.87, blue: 0.50, alpha: 1)
+        let invalid = UIColor(red: 0.98, green: 0.80, blue: 0.08, alpha: 1)
+        let unavailable = UIColor(white: 0.72, alpha: 1)
+
+        func append(_ text: String, accepted: Bool?, enabled: Bool, suffix: String = "  ") {
+            let color: UIColor
+            if !enabled || accepted == nil { color = unavailable }
+            else { color = accepted! ? valid : invalid }
+            values.append(NSAttributedString(
+                string: text + suffix,
+                attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
+            ))
+        }
+
+        if let box = analysis.normalizedBounds {
+            let center = hypot(box.midX - 0.5, box.midY - 0.44)
+            append(String(format: "size %.2f", box.width),
+                   accepted: box.width >= 0.28 && box.width <= 0.62,
+                   enabled: checks.faceSize)
+            append(String(format: "center %.2f", center), accepted: center <= 0.13,
+                   enabled: checks.centering, suffix: "\n")
+            append(String(format: "yaw %.1f", analysis.yaw), accepted: abs(analysis.yaw) <= 11,
+                   enabled: checks.pose)
+            append(String(format: "pitch %.1f", analysis.pitch), accepted: abs(analysis.pitch) <= 11,
+                   enabled: checks.pose)
+            append(String(format: "roll %.1f", analysis.roll), accepted: abs(analysis.roll) <= 9,
+                   enabled: checks.pose, suffix: "\n")
+        } else {
+            append("size —", accepted: nil, enabled: checks.faceSize)
+            append("center —", accepted: nil, enabled: checks.centering, suffix: "\n")
+            append("yaw —", accepted: nil, enabled: checks.pose)
+            append("pitch —", accepted: nil, enabled: checks.pose)
+            append("roll —", accepted: nil, enabled: checks.pose, suffix: "\n")
+        }
+
+        append("eye L " + probability(analysis.leftEye),
+               accepted: analysis.leftEye.map { $0 >= 0.62 }, enabled: checks.eyesOpen)
+        append("R " + probability(analysis.rightEye),
+               accepted: analysis.rightEye.map { $0 >= 0.62 }, enabled: checks.eyesOpen)
+        append("smile " + probability(analysis.smile),
+               accepted: analysis.smile.map { $0 <= 0.38 },
+               enabled: checks.neutralExpression, suffix: "\n")
+        append(String(format: "light %.2f", analysis.brightness),
+               accepted: analysis.brightness >= 0.20 && analysis.brightness <= 0.88,
+               enabled: checks.brightness)
+        append(String(format: "sharp %.2f", analysis.sharpness),
+               accepted: analysis.sharpness >= 0.10, enabled: checks.sharpness)
+        append("stable \(analysis.stableDurationMs)ms",
+               accepted: analysis.stableDurationMs >= 650, enabled: checks.stability, suffix: "")
+
+        let height: CGFloat = 76
+        let rect = CGRect(x: 16,
+                          y: bounds.height - safeAreaInsets.bottom - height - 8,
+                          width: max(100, bounds.width - 32), height: height)
+        values.draw(in: rect)
+    }
+
+    private func probability(_ value: CGFloat?) -> String {
+        guard let value = value else { return "—" }
+        return String(format: "%.2f", value)
     }
 
     private func stateColor(_ state: FaceCaptureState) -> UIColor {

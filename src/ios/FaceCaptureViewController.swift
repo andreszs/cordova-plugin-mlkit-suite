@@ -21,7 +21,6 @@ final class FaceCaptureViewController: UIViewController {
     private let stillProcessor: FaceStillProcessor
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var overlayView: FaceOverlayView!
-    private var photoOutput: AVCapturePhotoOutput?
     private var videoOutput: AVCaptureVideoDataOutput?
     private var processingFrame = false
     private var capturing = false
@@ -30,7 +29,6 @@ final class FaceCaptureViewController: UIViewController {
     private var stableSince: CFTimeInterval = 0
     private var stableFrames = 0
     private var timeoutItem: DispatchWorkItem?
-
     init(options: FaceCaptureOptions) {
         self.options = options
         let detectorOptions = FaceDetectorOptions()
@@ -64,6 +62,7 @@ final class FaceCaptureViewController: UIViewController {
         overlayView = FaceOverlayView(
             instruction: options.instructionText,
             debugMode: options.debugMode,
+            checks: options.checks,
             initialMessage: options.localization.text("face_searching")
         )
         overlayView.translatesAutoresizingMaskIntoConstraints = false
@@ -145,20 +144,11 @@ final class FaceCaptureViewController: UIViewController {
                 self.session.addOutput(video)
                 self.videoOutput = video
 
-                let photo = AVCapturePhotoOutput()
-                guard self.session.canAddOutput(photo) else {
-                    throw MlKitSuiteError.cameraUnavailable(
-                        self.options.localization.text("photo_capture_config_failed"), true)
-                }
-                self.session.addOutput(photo)
-                photo.isHighResolutionCaptureEnabled = true
-                self.photoOutput = photo
                 self.session.commitConfiguration()
 
-                self.configure(connection: video.connection(with: .video))
-                self.configure(connection: photo.connection(with: .video))
+                self.configure(connection: video.connection(with: .video), mirrored: true)
                 DispatchQueue.main.async {
-                    self.configure(connection: self.previewLayer.connection)
+                    self.configure(connection: self.previewLayer.connection, mirrored: true)
                 }
                 self.session.startRunning()
             } catch let error as MlKitSuiteError {
@@ -177,10 +167,13 @@ final class FaceCaptureViewController: UIViewController {
         }
     }
 
-    private func configure(connection: AVCaptureConnection?) {
+    private func configure(connection: AVCaptureConnection?, mirrored: Bool) {
         guard let connection = connection else { return }
         if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
-        if connection.isVideoMirroringSupported { connection.isVideoMirrored = true }
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = mirrored
+        }
     }
 
     private func classify(faces: [Face], brightness: CGFloat, sharpness: CGFloat,
@@ -275,37 +268,47 @@ final class FaceCaptureViewController: UIViewController {
                                    brightness: brightness, sharpness: sharpness, stableDurationMs: 0)
     }
 
-    private func handle(_ analysis: FaceCaptureAnalysis) {
+    private func handle(_ analysis: FaceCaptureAnalysis, pixelBuffer: CVPixelBuffer) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, !self.completed, !self.capturing else { return }
             self.overlayView.update(analysis, message: self.message(for: analysis.state))
-            if analysis.state == .ready { self.beginCapture(analysis) }
+            if analysis.state == .ready { self.beginCapture(analysis, pixelBuffer: pixelBuffer) }
         }
     }
 
-    private func beginCapture(_ analysis: FaceCaptureAnalysis) {
-        guard !capturing, !completed, photoOutput != nil else { return }
+    private func beginCapture(_ analysis: FaceCaptureAnalysis, pixelBuffer: CVPixelBuffer) {
+        guard !capturing, !completed else { return }
         capturing = true
         var capturingAnalysis = analysis
         capturingAnalysis.state = .capturing
         overlayView.update(capturingAnalysis,
                            message: options.localization.text("face_capturing"))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.capturePhoto()
+        processingQueue.async { [weak self] in
+            guard let self = self, !self.completed else { return }
+            do {
+                let result = try self.stillProcessor.process(
+                    pixelBuffer: pixelBuffer,
+                    analysis: analysis,
+                    directory: self.cacheDirectory()
+                )
+                DispatchQueue.main.async { self.finish(result) }
+            } catch let error as MlKitSuiteError {
+                DispatchQueue.main.async {
+                    switch error {
+                    case .captureFailed(let message, true): self.retry(message)
+                    default: self.fail(error)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.fail(.processingFailed(
+                        self.options.localization.format(
+                            "face_process_failed", error.localizedDescription
+                        ), true
+                    ))
+                }
+            }
         }
-    }
-
-    private func capturePhoto() {
-        guard let output = photoOutput, !completed else { return }
-        let settings: AVCapturePhotoSettings
-        if output.availablePhotoCodecTypes.contains(.jpeg) {
-            settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
-        } else {
-            settings = AVCapturePhotoSettings()
-        }
-        settings.isHighResolutionPhotoEnabled = true
-        settings.photoQualityPrioritization = .quality
-        output.capturePhoto(with: settings, delegate: self)
     }
 
     private func retry(_ message: String) {
@@ -410,70 +413,23 @@ extension FaceCaptureViewController: AVCaptureVideoDataOutputSampleBufferDelegat
         processingFrame = true
         let quality = imageQuality(pixelBuffer)
         let image = VisionImage(buffer: sampleBuffer)
-        image.orientation = .leftMirrored
-        // ML Kit reports face coordinates in the input buffer's coordinate space;
-        // orientation is metadata used for detection, not a pixel-buffer rotation.
-        let imageSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
-                               height: CVPixelBufferGetHeight(pixelBuffer))
+        let bufferWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
+        // AVCaptureVideoDataOutput may physically rotate portrait buffers when its
+        // connection has videoOrientation = .portrait. Only apply the sensor-to-
+        // portrait transform when the delivered buffer is still landscape.
+        image.orientation = bufferHeight >= bufferWidth ? .up : .leftMirrored
+        let imageSize = CGSize(width: bufferWidth, height: bufferHeight)
         liveDetector.process(image) { [weak self] faces, error in
             guard let self = self else { return }
             self.analysisQueue.async {
                 self.processingFrame = false
                 if error == nil {
-                    self.handle(self.classify(faces: faces ?? [], brightness: quality.0,
-                                              sharpness: quality.1, imageSize: imageSize))
-                }
-            }
-        }
-    }
-}
-
-extension FaceCaptureViewController: AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto,
-                     error: Error?) {
-        if let error = error {
-            DispatchQueue.main.async {
-                self.retry(self.options.localization.format(
-                    "face_capture_failed_detail", error.localizedDescription
-                ))
-            }
-            return
-        }
-        guard let data = photo.fileDataRepresentation() else {
-            DispatchQueue.main.async {
-                self.retry(self.options.localization.text("face_no_photo"))
-            }
-            return
-        }
-        processingQueue.async { [weak self] in
-            guard let self = self, !self.completed else { return }
-            do {
-                let directory = try self.cacheDirectory()
-                self.stillProcessor.process(data: data, directory: directory) { result in
-                    DispatchQueue.main.async {
-                        switch result {
-                        case .success(let value): self.finish(value)
-                        case .failure(let error as MlKitSuiteError):
-                            switch error {
-                            case .captureFailed(let message, true): self.retry(message)
-                            default: self.fail(error)
-                            }
-                        case .failure(let error):
-                            self.fail(.processingFailed(
-                                self.options.localization.format(
-                                    "face_process_failed", error.localizedDescription
-                                ), true
-                            ))
-                        }
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.fail(.processingFailed(
-                        self.options.localization.format(
-                            "face_prepare_failed", error.localizedDescription
-                        ), false
-                    ))
+                    self.handle(
+                        self.classify(faces: faces ?? [], brightness: quality.0,
+                                      sharpness: quality.1, imageSize: imageSize),
+                        pixelBuffer: pixelBuffer
+                    )
                 }
             }
         }

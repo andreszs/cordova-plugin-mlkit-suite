@@ -403,7 +403,7 @@ final class MlKitSuitePlugin: CDVPlugin {
 
     private func barcodeDictionary(_ barcode: Barcode) -> [String: Any] {
         let frame = barcode.frame
-        let points: [[String: Double]] = barcode.cornerPoints.map {
+        let points: [[String: Double]] = (barcode.cornerPoints ?? []).map {
             let point = $0.cgPointValue
             return ["x": Double(point.x), "y": Double(point.y)]
         }

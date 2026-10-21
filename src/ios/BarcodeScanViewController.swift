@@ -216,7 +216,10 @@ final class BarcodeScanViewController: UIViewController {
     private func configure(connection: AVCaptureConnection?) {
         guard let connection = connection else { return }
         if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
-        if connection.isVideoMirroringSupported { connection.isVideoMirrored = false }
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = false
+        }
     }
 
     @objc private func toggleTorch() {
@@ -363,8 +366,8 @@ extension BarcodeScanViewController: AVCaptureVideoDataOutputSampleBufferDelegat
         let imageSize: CGSize
         if let imageBuffer = imageBuffer {
             imageSize = CGSize(
-                width: CVPixelBufferGetHeight(imageBuffer),
-                height: CVPixelBufferGetWidth(imageBuffer)
+                width: CVPixelBufferGetWidth(imageBuffer),
+                height: CVPixelBufferGetHeight(imageBuffer)
             )
         } else {
             imageSize = .zero
