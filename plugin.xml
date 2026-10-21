@@ -111,6 +111,7 @@
         <source-file src="src/ios/BarcodeScanTypes.swift" />
         <source-file src="src/ios/BarcodeOverlayView.swift" />
         <source-file src="src/ios/BarcodeScanViewController.swift" />
+        <source-file src="src/ios/TextRecognitionProcessor.swift" />
         <source-file src="src/ios/MlKitSuitePlugin.swift" />
         <resource-file src="src/ios/MlKitSuitePrivacy.bundle" target="MlKitSuitePrivacy.bundle" />
         <resource-file src="src/ios/MlKitSuiteResources.bundle" target="MlKitSuiteResources.bundle" />

@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import MLKitBarcodeScanning
-import MLKitTextRecognition
 import MLKitVision
 import UIKit
 import WebKit
@@ -146,20 +145,21 @@ final class MlKitSuitePlugin: CDVPlugin {
         commandDelegate.run(inBackground: { [weak self] in
             guard let self = self else { return }
             do {
-                let image = try self.visionImage(rawPath)
-                let recognizer = TextRecognizer.textRecognizer(options: TextRecognizerOptions())
-                recognizer.process(image) { result, error in
-                    if error != nil || result == nil {
+                let image = try self.decodedImage(rawPath)
+                let processor = TextRecognitionProcessor()
+                processor.process(image) { result in
+                    switch result {
+                    case .success(let text):
+                        self.commandDelegate.send(
+                            CDVPluginResult(status: CDVCommandStatus.ok, messageAs: text),
+                            callbackId: command.callbackId
+                        )
+                    case .failure:
                         self.sendError(
                             callbackId: command.callbackId, code: "PROCESSING_FAILED",
                             message: localization.text("text_recognition_failed"), recoverable: true
                         )
-                        return
                     }
-                    self.commandDelegate.send(
-                        CDVPluginResult(status: CDVCommandStatus.ok, messageAs: result?.text ?? ""),
-                        callbackId: command.callbackId
-                    )
                 }
             } catch {
                 self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
@@ -377,7 +377,7 @@ final class MlKitSuitePlugin: CDVPlugin {
         return "\(scheme)://\(hostname)\(Self.imagePathPrefix)\(fileName)"
     }
 
-    private func visionImage(_ rawPath: String) throws -> VisionImage {
+    private func decodedImage(_ rawPath: String) throws -> UIImage {
         let value = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         let path: String
         if let url = URL(string: value), url.isFileURL {
@@ -396,6 +396,11 @@ final class MlKitSuitePlugin: CDVPlugin {
         guard let image = UIImage(contentsOfFile: path) else {
             throw MlKitSuiteError.processingFailed("Unable to decode imagePath.", false)
         }
+        return image
+    }
+
+    private func visionImage(_ rawPath: String) throws -> VisionImage {
+        let image = try decodedImage(rawPath)
         let visionImage = VisionImage(image: image)
         visionImage.orientation = image.imageOrientation
         return visionImage
