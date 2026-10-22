@@ -34,13 +34,13 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 
 | Module | Android | iOS |
 | --- | --- | --- |
-| Barcode scanning | ✅ Live camera and still images | ✅ Live camera and still images |
-| Document scanner | ✅ Available | ❌ Not available |
-| Face detection | ✅ Guided face capture | ✅ Guided face capture |
-| Image labeling | ✅ Default model | ✅ Default model |
-| Selfie segmentation | ✅ Transparent PNG | ✅ Transparent PNG |
-| Subject segmentation | ✅ Transparent PNG | ❌ Not available |
-| Text recognition v2 | ✅ Latin script | ✅ Latin script |
+| [Barcode scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) | ✅ Live camera and still images | ✅ Live camera and still images |
+| [Document scanner](https://developers.google.com/ml-kit/vision/doc-scanner) | ✅ Available | ❌ Not available |
+| [Face detection](https://developers.google.com/ml-kit/vision/face-detection) | ✅ Guided face capture | ✅ Guided face capture |
+| [Image labeling](https://developers.google.com/ml-kit/vision/image-labeling) | ✅ Default model | ✅ Default model |
+| [Selfie segmentation](https://developers.google.com/ml-kit/vision/selfie-segmentation) | ✅ Transparent PNG | ✅ Transparent PNG |
+| [Subject segmentation](https://developers.google.com/ml-kit/vision/subject-segmentation) | ✅ Transparent PNG | ❌ Not available |
+| [Text recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2) | ✅ Latin script | ✅ Latin script |
 
 Android model delivery is configurable per module. Native plugin UI and errors support automatic, English, and Spanish localization.
 
