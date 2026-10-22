@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed Android barcode decoding for legacy PDF417 payloads encoded as ISO-8859-1, preserving accented identity data.
 - Added default-model Image Labeling on Android and iOS, including configurable Android model delivery.
 - Added bundled Selfie Segmentation on Android and iOS with transparent PNG output.
 
