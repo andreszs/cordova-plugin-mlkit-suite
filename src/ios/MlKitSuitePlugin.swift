@@ -77,6 +77,13 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "modelStatus": "bundled",
                 "output": "transparent-png"
             ],
+            "subjectSegmentation": [
+                "segment": false,
+                "mode": "unsupported",
+                "bundled": false,
+                "ready": false,
+                "modelStatus": "unsupported"
+            ],
             "text": [
                 "recognize": true,
                 "mode": "bundled",
@@ -255,6 +262,17 @@ final class MlKitSuitePlugin: CDVPlugin {
                                message: localization.text("image_open_failed"), recoverable: false)
             }
         })
+    }
+
+    @objc(segmentSubjects:)
+    func segmentSubjects(_ command: CDVInvokedUrlCommand) {
+        let localization = localization(command.argument(at: 1) as? [String: Any] ?? [:])
+        sendError(
+            callbackId: command.callbackId,
+            code: "UNSUPPORTED_PLATFORM",
+            message: localization.text("subject_unsupported_platform"),
+            recoverable: false
+        )
     }
 
     @objc(prepareModels:)

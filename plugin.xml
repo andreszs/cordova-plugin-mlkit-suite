@@ -5,9 +5,9 @@
         id="cordova-plugin-mlkit-suite"
         version="0.1.0">
     <name>ML Kit Suite</name>
-    <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, selfie segmentation, and guided face processing.</description>
+    <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, selfie and subject segmentation, and guided face processing.</description>
     <license>MIT</license>
-    <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,image-labeling,selfie-segmentation,background-removal,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+    <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,image-labeling,selfie-segmentation,subject-segmentation,background-removal,pdf417,qr-code,camera,camerax,avfoundation</keywords>
 
     <engines>
         <engine name="cordova" version=">=11.0.0" />
@@ -25,6 +25,7 @@
         <preference name="ANDROID_MLKIT_BARCODE_MODE" default="inherit" />
         <preference name="ANDROID_MLKIT_OCR_MODE" default="inherit" />
         <preference name="ANDROID_MLKIT_IMAGE_LABELING_MODE" default="inherit" />
+        <preference name="ANDROID_MLKIT_SUBJECT_SEGMENTATION_MODE" default="inherit" />
 
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="MlKitSuite">
@@ -52,6 +53,9 @@
             <meta-data
                 android:name="com.andreszs.plugins.mlkitsuite.IMAGE_LABELING_MODE"
                 android:value="${mlKitSuiteImageLabelingMode}" />
+            <meta-data
+                android:name="com.andreszs.plugins.mlkitsuite.SUBJECT_SEGMENTATION_MODE"
+                android:value="${mlKitSuiteSubjectSegmentationMode}" />
             <meta-data
                 android:name="${mlKitSuiteDependencyMetadataName}"
                 android:value="${mlKitSuiteDependencyMetadataValue}" />
@@ -98,6 +102,8 @@
         <source-file src="src/android/java/MlKitLoadingDialog.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/StaticImageProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/SelfieSegmentationProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/SubjectSegmentationModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/SubjectSegmentationProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
     </platform>
 
     <platform name="ios">

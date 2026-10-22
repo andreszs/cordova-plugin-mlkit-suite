@@ -28,7 +28,7 @@ Promise.resolve()
     .then(function () { return MlKit.getCapabilities(); })
     .then(function () { return MlKit.prepareModels(); })
     .then(function () {
-        return MlKit.prepareModels(['barcode', 'image-labeling', 'ocr'], {
+        return MlKit.prepareModels(['barcode', 'image-labeling', 'ocr', 'subject-segmentation'], {
             moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR'
         });
     })
@@ -61,6 +61,12 @@ Promise.resolve()
     })
     .then(function () {
         return MlKit.segmentSelfie('/cache/selfie.jpg', { maxDimension: 1600 });
+    })
+    .then(function () {
+        return MlKit.segmentSubjects('/cache/subjects.jpg', {
+            maxDimension: 1600,
+            moduleLoadingMessage: 'Preparing subject segmentation…'
+        });
     })
     .then(function () {
         return MlKit.segmentSelfie('/cache/selfie.jpg', { maxDimension: 128 }).then(function () {
@@ -121,7 +127,7 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [
-                ['barcode', 'image-labeling', 'ocr'], {
+                ['barcode', 'image-labeling', 'ocr', 'subject-segmentation'], {
                     moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR'
                 }
             ] },
@@ -148,6 +154,12 @@ Promise.resolve()
             ] },
             { service: 'MlKitSuite', action: 'segmentSelfie', args: [
                 '/cache/selfie.jpg', { maxDimension: 1600 }
+            ] },
+            { service: 'MlKitSuite', action: 'segmentSubjects', args: [
+                '/cache/subjects.jpg', {
+                    maxDimension: 1600,
+                    moduleLoadingMessage: 'Preparing subject segmentation…'
+                }
             ] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] }

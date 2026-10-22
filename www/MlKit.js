@@ -57,11 +57,11 @@ exports.getCapabilities = function getCapabilities() {
 
 /**
  * Ensures that selected Play services ML Kit modules are ready. Omit modules
- * to prepare Face Detection, Barcode Scanning, Image Labeling, and Latin OCR. Bundled modules
- * are ignored because they are already available.
+ * to prepare Face Detection, Barcode Scanning, Image Labeling, Latin OCR, and
+ * Subject Segmentation. Bundled modules are ignored because they are already available.
  *
- * @param {string|string[]|object} [modules] face, barcode, image-labeling, ocr, an array, or
- *        the options object when preparing every module.
+ * @param {string|string[]|object} [modules] face, barcode, image-labeling, ocr,
+ *        subject-segmentation, an array, or the options object when preparing every module.
  * @param {{moduleLoadingMessage?: string|null, locale?: string}} [options]
  *        Native loading text and UI locale (`auto`, `en`, `es`, or BCP-47).
  * @returns {Promise<{status: string, alreadyAvailable: boolean}>}
@@ -80,12 +80,13 @@ exports.prepareModels = function prepareModels(modules, options) {
     var requested = typeof modules === 'string' ? [modules] : modules;
     var valid = Array.isArray(requested) && requested.length > 0 && requested.every(function (module) {
         return typeof module === 'string'
-            && ['face', 'barcode', 'image-labeling', 'ocr'].indexOf(module.trim().toLowerCase()) !== -1;
+            && ['face', 'barcode', 'image-labeling', 'ocr', 'subject-segmentation']
+                .indexOf(module.trim().toLowerCase()) !== -1;
     });
     if (!valid) {
         return Promise.reject({
             code: 'INVALID_ARGUMENT',
-            message: 'modules must be face, barcode, image-labeling, ocr, or an array containing those names.',
+            message: 'modules must be face, barcode, image-labeling, ocr, subject-segmentation, or an array containing those names.',
             recoverable: false
         });
     }
@@ -205,6 +206,42 @@ exports.segmentSelfie = function segmentSelfie(imagePath, options) {
         }
     }
     return call('segmentSelfie', [imagePath, options]);
+};
+
+/**
+ * Separates foreground subjects from the background of an existing local image.
+ * Android only. The returned image is a temporary PNG with transparency.
+ *
+ * @param {string} imagePath Native path, file/content URI, or plugin image URI.
+ * @param {{maxDimension?: number, moduleLoadingMessage?: string|null,
+ *          locale?: string}} [options] Optional settings.
+ * @returns {Promise<{status: string, imageUri: string, imagePath: string,
+ *          width: number, height: number, mimeType: string, bytes: number}>}
+ */
+exports.segmentSubjects = function segmentSubjects(imagePath, options) {
+    if (typeof imagePath !== 'string' || !imagePath.trim()) {
+        return Promise.reject({
+            code: 'INVALID_ARGUMENT',
+            message: 'imagePath must be a non-empty string.',
+            recoverable: false
+        });
+    }
+    options = options || {};
+    if (Object.prototype.hasOwnProperty.call(options, 'maxDimension')) {
+        var maxDimension = options.maxDimension;
+        if (typeof maxDimension !== 'number' || !isFinite(maxDimension)
+            || Math.floor(maxDimension) !== maxDimension
+            || maxDimension < 256 || maxDimension > 4096) {
+            return Promise.reject({
+                code: 'INVALID_ARGUMENT',
+                message: 'maxDimension must be an integer from 256 to 4096.',
+                recoverable: false
+            });
+        }
+    }
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
+    return call('segmentSubjects', [imagePath, options]);
 };
 
 /**

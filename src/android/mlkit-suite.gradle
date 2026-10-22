@@ -107,11 +107,27 @@ def faceMode = readModuleMode('ANDROID_MLKIT_FACE_MODE')
 def barcodeMode = readModuleMode('ANDROID_MLKIT_BARCODE_MODE')
 def ocrMode = readModuleMode('ANDROID_MLKIT_OCR_MODE')
 def imageLabelingMode = readModuleMode('ANDROID_MLKIT_IMAGE_LABELING_MODE')
+def rawSubjectSegmentationMode = mlKitSuiteReadPluginVariable(
+    'ANDROID_MLKIT_SUBJECT_SEGMENTATION_MODE', 'inherit'
+)
+def subjectSegmentationMode = rawSubjectSegmentationMode == null
+    || rawSubjectSegmentationMode.trim().isEmpty()
+    || rawSubjectSegmentationMode.equalsIgnoreCase('inherit')
+        ? (defaultMode == 'bundled' ? 'install-time' : defaultMode)
+        : mlKitSuiteNormalizeMode(
+            rawSubjectSegmentationMode, 'ANDROID_MLKIT_SUBJECT_SEGMENTATION_MODE'
+        )
+if (subjectSegmentationMode == 'bundled') {
+    throw new GradleException(
+        'cordova-plugin-mlkit-suite: Subject Segmentation only supports install-time or first-use.'
+    )
+}
 def installTimeModules = []
 if (faceMode == 'install-time') installTimeModules.add('face')
 if (barcodeMode == 'install-time') installTimeModules.add('barcode')
 if (ocrMode == 'install-time') installTimeModules.add('ocr')
 if (imageLabelingMode == 'install-time') installTimeModules.add('ica')
+if (subjectSegmentationMode == 'install-time') installTimeModules.add('subject_segment')
 
 if (cordovaConfig.MIN_SDK_VERSION < 24) {
     cordovaConfig.MIN_SDK_VERSION = 24
@@ -138,7 +154,9 @@ logger.lifecycle(
     "Barcode ${barcodeMode} (${barcodeMode == 'bundled' ? '17.2.0' : '18.3.1'}), " +
     "OCR ${ocrMode} (${ocrMode == 'bundled' ? '16.0.1' : '19.0.1'}), " +
     "Image Labeling ${imageLabelingMode} (${imageLabelingMode == 'bundled' ? '17.0.9' : '16.0.8'}), " +
-    'Selfie Segmentation bundled (16.0.0-beta6), Document Scanner 16.0.0'
+    "Selfie Segmentation bundled (16.0.0-beta6), " +
+    "Subject Segmentation ${subjectSegmentationMode} (16.0.0-beta1), " +
+    'Document Scanner 16.0.0'
 )
 
 android {
@@ -147,6 +165,7 @@ android {
         manifestPlaceholders.mlKitSuiteBarcodeMode = barcodeMode
         manifestPlaceholders.mlKitSuiteOcrMode = ocrMode
         manifestPlaceholders.mlKitSuiteImageLabelingMode = imageLabelingMode
+        manifestPlaceholders.mlKitSuiteSubjectSegmentationMode = subjectSegmentationMode
         if (!installTimeModules.isEmpty()) {
             manifestPlaceholders.mlKitSuiteDependencyMetadataName =
                 'com.google.mlkit.vision.DEPENDENCIES'
@@ -192,6 +211,7 @@ dependencies {
     }
     implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
     implementation 'com.google.mlkit:segmentation-selfie:16.0.0-beta6'
+    implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
     compileOnly "androidx.webkit:webkit:${webKitByCordova[cordovaAndroidMajor]}"
 }
 

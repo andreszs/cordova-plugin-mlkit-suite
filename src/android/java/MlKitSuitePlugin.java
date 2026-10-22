@@ -38,6 +38,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         "com.andreszs.plugins.mlkitsuite.OCR_MODE";
     private static final String IMAGE_LABELING_MODE_METADATA =
         "com.andreszs.plugins.mlkitsuite.IMAGE_LABELING_MODE";
+    private static final String SUBJECT_SEGMENTATION_MODE_METADATA =
+        "com.andreszs.plugins.mlkitsuite.SUBJECT_SEGMENTATION_MODE";
 
     private CallbackContext pendingCallback;
     private JSONObject pendingOptions;
@@ -63,6 +65,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
         if ("segmentSelfie".equals(action)) {
             processSelfieSegmentation(args, callbackContext);
+            return true;
+        }
+        if ("segmentSubjects".equals(action)) {
+            processSubjectSegmentation(args, callbackContext);
             return true;
         }
         if ("prepareModels".equals(action)) {
@@ -141,7 +147,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             );
             boolean validImage = fileName.matches("face-[0-9a-fA-F-]+\\.jpg")
                 || fileName.matches("document-[0-9a-fA-F-]+-page-[0-9]+\\.jpg")
-                || fileName.matches("selfie-[0-9a-fA-F-]+\\.png");
+                || fileName.matches("selfie-[0-9a-fA-F-]+\\.png")
+                || fileName.matches("subject-[0-9a-fA-F-]+\\.png");
             boolean validDocument = fileName.matches("document-[0-9a-fA-F-]+\\.pdf");
             String mimeType = imageRequest
                 ? (fileName.endsWith(".png") ? "image/png" : "image/jpeg")
@@ -278,12 +285,16 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject document = new JSONObject();
         JSONObject imageLabeling = new JSONObject();
         JSONObject selfieSegmentation = new JSONObject();
+        JSONObject subjectSegmentation = new JSONObject();
         JSONObject text = new JSONObject();
         JSONObject localization = new JSONObject();
         String faceMode = androidModuleMode(FACE_MODE_METADATA);
         String barcodeMode = androidModuleMode(BARCODE_MODE_METADATA);
         String ocrMode = androidModuleMode(OCR_MODE_METADATA);
         String imageLabelingMode = androidModuleMode(IMAGE_LABELING_MODE_METADATA);
+        String subjectSegmentationMode = androidModuleMode(
+            SUBJECT_SEGMENTATION_MODE_METADATA
+        );
         String modelDelivery = aggregateDelivery(
             faceMode, barcodeMode, ocrMode, imageLabelingMode
         );
@@ -351,6 +362,13 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             selfieSegmentation.put("ready", true);
             selfieSegmentation.put("modelStatus", "bundled");
             selfieSegmentation.put("output", "transparent-png");
+            root.put("subjectSegmentation", subjectSegmentation);
+            subjectSegmentation.put("segment", true);
+            subjectSegmentation.put("mode", subjectSegmentationMode);
+            subjectSegmentation.put("bundled", false);
+            subjectSegmentation.put("dynamicallyDelivered", true);
+            putRuntimeModelStatus(subjectSegmentation, null);
+            subjectSegmentation.put("output", "transparent-png");
             root.put("text", text);
             text.put("recognize", true);
             text.put("mode", ocrMode);
@@ -366,6 +384,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject face = result.optJSONObject("face");
         JSONObject barcode = result.optJSONObject("barcode");
         JSONObject imageLabeling = result.optJSONObject("imageLabeling");
+        JSONObject subjectSegmentation = result.optJSONObject("subjectSegmentation");
         JSONObject text = result.optJSONObject("text");
         boolean checkFace = face != null && !face.optBoolean("bundled");
         boolean checkBarcode = barcode != null && !barcode.optBoolean("bundled");
@@ -382,14 +401,17 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 mergeRuntimeModelStatus(
                     imageLabeling, availability.optJSONObject("imageLabeling")
                 );
-                JSONObject document = result.optJSONObject("document");
-                if (document == null || !document.optBoolean("deviceSupported")) {
-                    callbackContext.success(result);
-                    return;
-                }
-                DocumentScannerModuleInstaller.checkAvailability(activity, ready -> {
-                    putRuntimeModelStatus(document, ready);
-                    callbackContext.success(result);
+                SubjectSegmentationModuleInstaller.checkAvailability(activity, subjectReady -> {
+                    putRuntimeModelStatus(subjectSegmentation, subjectReady);
+                    JSONObject document = result.optJSONObject("document");
+                    if (document == null || !document.optBoolean("deviceSupported")) {
+                        callbackContext.success(result);
+                        return;
+                    }
+                    DocumentScannerModuleInstaller.checkAvailability(activity, ready -> {
+                        putRuntimeModelStatus(document, ready);
+                        callbackContext.success(result);
+                    });
                 });
             }
         ));
@@ -538,7 +560,9 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             && !"bundled".equals(androidModuleMode(OCR_MODE_METADATA));
         boolean prepareImageLabeling = requestedModules.contains("image-labeling")
             && !"bundled".equals(androidModuleMode(IMAGE_LABELING_MODE_METADATA));
-        if (!prepareFace && !prepareBarcode && !prepareOcr && !prepareImageLabeling) {
+        boolean prepareSubjectSegmentation = requestedModules.contains("subject-segmentation");
+        if (!prepareFace && !prepareBarcode && !prepareOcr && !prepareImageLabeling
+            && !prepareSubjectSegmentation) {
             JSONObject result = new JSONObject();
             try {
                 result.put("status", "ready");
@@ -547,10 +571,9 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             callbackContext.success(result);
             return;
         }
-        cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
+        Runnable prepareConfiguredModels = () -> MlKitModelsModuleInstaller.prepare(
             cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr,
-            prepareImageLabeling, loadingMessage,
-            localization,
+            prepareImageLabeling, loadingMessage, localization,
             new MlKitModelsModuleInstaller.Callback() {
                 @Override
                 public void onReady(JSONObject result) {
@@ -562,7 +585,32 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                     callbackContext.error(errorValue);
                 }
             }
-        ));
+        );
+        cordova.getActivity().runOnUiThread(() -> {
+            if (!prepareSubjectSegmentation) {
+                prepareConfiguredModels.run();
+                return;
+            }
+            SubjectSegmentationModuleInstaller.prepare(
+                cordova.getActivity(), loadingMessage, localization,
+                new SubjectSegmentationModuleInstaller.Callback() {
+                    @Override
+                    public void onReady(JSONObject result) {
+                        if (!prepareFace && !prepareBarcode && !prepareOcr
+                            && !prepareImageLabeling) {
+                            callbackContext.success(result);
+                        } else {
+                            prepareConfiguredModels.run();
+                        }
+                    }
+
+                    @Override
+                    public void onError(JSONObject errorValue) {
+                        callbackContext.error(errorValue);
+                    }
+                }
+            );
+        });
     }
 
     private static Set<String> requestedModules(JSONArray args) {
@@ -573,6 +621,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             result.add("barcode");
             result.add("ocr");
             result.add("image-labeling");
+            result.add("subject-segmentation");
             return result;
         }
         if (requested instanceof String) {
@@ -588,7 +637,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 Object value = array.opt(index);
                 if (!(value instanceof String)) {
                     throw new IllegalArgumentException(
-                        "modules may contain only face, barcode, image-labeling, or ocr."
+                        "modules may contain only face, barcode, image-labeling, ocr, or subject-segmentation."
                     );
                 }
                 addRequestedModule(result, (String) value);
@@ -596,17 +645,18 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return result;
         }
         throw new IllegalArgumentException(
-            "modules must be face, barcode, image-labeling, ocr, or an array containing those names."
+            "modules must be face, barcode, image-labeling, ocr, subject-segmentation, or an array containing those names."
         );
     }
 
     private static void addRequestedModule(Set<String> modules, String rawValue) {
         String value = rawValue == null ? "" : rawValue.trim().toLowerCase(Locale.US);
         if (!("face".equals(value) || "barcode".equals(value)
-            || "image-labeling".equals(value) || "ocr".equals(value))) {
+            || "image-labeling".equals(value) || "ocr".equals(value)
+            || "subject-segmentation".equals(value))) {
             throw new IllegalArgumentException(
                 "Unknown module '" + rawValue
-                    + "'. Use face, barcode, image-labeling, or ocr."
+                    + "'. Use face, barcode, image-labeling, ocr, or subject-segmentation."
             );
         }
         modules.add(value);
@@ -723,6 +773,86 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                         callbackContext.error(error(code, message, recoverable));
                     }
                 }
+            );
+        } catch (IllegalArgumentException exception) {
+            callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
+        }
+    }
+
+    private void processSubjectSegmentation(JSONArray args, CallbackContext callbackContext) {
+        String imagePath = args.optString(0, "").trim();
+        try {
+            JSONObject options = optionsAt(args, 1, "options");
+            MlKitLocalization localization = localization(options);
+            if (imagePath.isEmpty()) {
+                callbackContext.error(error("INVALID_ARGUMENT",
+                    "imagePath must be a non-empty string.", false));
+                return;
+            }
+            int maxDimension = options.optInt("maxDimension", 2048);
+            if (maxDimension < 256 || maxDimension > 4096) {
+                throw new IllegalArgumentException(
+                    "maxDimension must be an integer from 256 to 4096."
+                );
+            }
+            String loadingMessage = moduleLoadingMessage(options);
+            cordova.getActivity().runOnUiThread(() ->
+                SubjectSegmentationModuleInstaller.prepare(
+                    cordova.getActivity(), loadingMessage, localization,
+                    new SubjectSegmentationModuleInstaller.Callback() {
+                        @Override
+                        public void onReady(JSONObject ignored) {
+                            File cache = new File(
+                                cordova.getActivity().getCacheDir(), "mlkit-suite"
+                            );
+                            SubjectSegmentationProcessor.process(
+                                cordova.getActivity().getApplicationContext(),
+                                imagePath,
+                                cache,
+                                maxDimension,
+                                cordova.getThreadPool(),
+                                localization,
+                                new SubjectSegmentationProcessor.Callback() {
+                                    @Override
+                                    public void onSuccess(
+                                        SubjectSegmentationProcessor.Result result
+                                    ) {
+                                        JSONObject payload = new JSONObject();
+                                        try {
+                                            payload.put("status", "success");
+                                            payload.put(
+                                                "imageUri",
+                                                imageWebBaseUrl() + result.file.getName()
+                                            );
+                                            payload.put(
+                                                "imagePath", result.file.getAbsolutePath()
+                                            );
+                                            payload.put("width", result.width);
+                                            payload.put("height", result.height);
+                                            payload.put("mimeType", "image/png");
+                                            payload.put("bytes", result.file.length());
+                                        } catch (Exception ignored) { }
+                                        callbackContext.success(payload);
+                                    }
+
+                                    @Override
+                                    public void onFailure(
+                                        String code, String message, boolean recoverable
+                                    ) {
+                                        callbackContext.error(error(
+                                            code, message, recoverable
+                                        ));
+                                    }
+                                }
+                            );
+                        }
+
+                        @Override
+                        public void onError(JSONObject errorValue) {
+                            callbackContext.error(errorValue);
+                        }
+                    }
+                )
             );
         } catch (IllegalArgumentException exception) {
             callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));

@@ -61,6 +61,7 @@
 "rear_camera_start_failed" = "No se pudo iniciar la cámara trasera: %@";
 
 "document_unsupported_platform" = "El escáner de documentos de ML Kit está disponible actualmente solo en Android.";
+"subject_unsupported_platform" = "La segmentación de sujetos de ML Kit está disponible actualmente solo en Android.";
 "image_open_failed" = "No se pudo abrir imagePath.";
 "text_recognition_failed" = "No se pudo reconocer texto en la imagen.";
 "barcode_image_failed" = "No se pudieron detectar códigos en la imagen.";

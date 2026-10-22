@@ -1,7 +1,7 @@
 {
   "name": "cordova-plugin-mlkit-suite",
   "version": "0.1.0",
-  "description": "Extensible Google ML Kit suite for Cordova document, text, barcode, image labeling, selfie segmentation, and guided face processing.",
+  "description": "Extensible Google ML Kit suite for Cordova document, text, barcode, image labeling, selfie and subject segmentation, and guided face processing.",
   "license": "MIT",
   "author": "Andres Zs",
   "homepage": "https://github.com/andreszs/cordova-plugin-mlkit-suite",
@@ -25,6 +25,7 @@
     "ocr",
     "image-labeling",
     "selfie-segmentation",
+    "subject-segmentation",
     "background-removal",
     "pdf417",
     "qr-code",

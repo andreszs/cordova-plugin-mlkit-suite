@@ -61,6 +61,7 @@
 "rear_camera_start_failed" = "Unable to start the rear camera: %@";
 
 "document_unsupported_platform" = "ML Kit Document Scanner is currently available on Android only.";
+"subject_unsupported_platform" = "ML Kit Subject Segmentation is currently available on Android only.";
 "image_open_failed" = "Unable to open imagePath.";
 "text_recognition_failed" = "Unable to recognize text in the image.";
 "barcode_image_failed" = "Unable to scan barcodes in the image.";
