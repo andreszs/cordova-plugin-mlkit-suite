@@ -51,7 +51,7 @@ Android model delivery is configurable per module. Native plugin UI and errors s
     <th>Face capture<br><sub>Android shown</sub></th>
     <th>Live barcode<br><sub>Android shown</sub></th>
     <th>Document scanner<br><sub>Android only</sub></th>
-    <th>Text recognition<br><sub>iOS</sub></th>
+    <th>Text recognition<br><sub>iOS shown</sub></th>
   </tr>
   <tr>
     <td><img src="docs/screenshots/face-capture.png" alt="Guided face capture on Android" width="205"></td>
