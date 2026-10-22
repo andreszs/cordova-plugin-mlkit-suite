@@ -68,6 +68,7 @@
     <string name="mlkit_suite_image_open_failed">Unable to open imagePath.</string>
     <string name="mlkit_suite_text_recognition_failed">Unable to recognize text in the image.</string>
     <string name="mlkit_suite_barcode_image_failed">Unable to scan barcodes in the image.</string>
+    <string name="mlkit_suite_image_labeling_failed">Unable to label the image.</string>
     <string name="mlkit_suite_camera_permission_denied">Camera permission was denied.</string>
     <string name="mlkit_suite_busy">Another interactive ML Kit session is already active.</string>
 </resources>

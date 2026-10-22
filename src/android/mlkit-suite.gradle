@@ -106,10 +106,12 @@ def readModuleMode = { String variableName ->
 def faceMode = readModuleMode('ANDROID_MLKIT_FACE_MODE')
 def barcodeMode = readModuleMode('ANDROID_MLKIT_BARCODE_MODE')
 def ocrMode = readModuleMode('ANDROID_MLKIT_OCR_MODE')
+def imageLabelingMode = readModuleMode('ANDROID_MLKIT_IMAGE_LABELING_MODE')
 def installTimeModules = []
 if (faceMode == 'install-time') installTimeModules.add('face')
 if (barcodeMode == 'install-time') installTimeModules.add('barcode')
 if (ocrMode == 'install-time') installTimeModules.add('ocr')
+if (imageLabelingMode == 'install-time') installTimeModules.add('ica')
 
 if (cordovaConfig.MIN_SDK_VERSION < 24) {
     cordovaConfig.MIN_SDK_VERSION = 24
@@ -135,6 +137,7 @@ logger.lifecycle(
     "Face ${faceMode} (${faceMode == 'bundled' ? mlKitFaceVersion : '17.1.0'}), " +
     "Barcode ${barcodeMode} (${barcodeMode == 'bundled' ? '17.2.0' : '18.3.1'}), " +
     "OCR ${ocrMode} (${ocrMode == 'bundled' ? '16.0.1' : '19.0.1'}), " +
+    "Image Labeling ${imageLabelingMode} (${imageLabelingMode == 'bundled' ? '17.0.9' : '16.0.8'}), " +
     'Document Scanner 16.0.0'
 )
 
@@ -143,6 +146,7 @@ android {
         manifestPlaceholders.mlKitSuiteFaceMode = faceMode
         manifestPlaceholders.mlKitSuiteBarcodeMode = barcodeMode
         manifestPlaceholders.mlKitSuiteOcrMode = ocrMode
+        manifestPlaceholders.mlKitSuiteImageLabelingMode = imageLabelingMode
         if (!installTimeModules.isEmpty()) {
             manifestPlaceholders.mlKitSuiteDependencyMetadataName =
                 'com.google.mlkit.vision.DEPENDENCIES'
@@ -180,6 +184,11 @@ dependencies {
         implementation 'com.google.mlkit:text-recognition:16.0.1'
     } else {
         implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
+    }
+    if (imageLabelingMode == 'bundled') {
+        implementation 'com.google.mlkit:image-labeling:17.0.9'
+    } else {
+        implementation 'com.google.android.gms:play-services-mlkit-image-labeling:16.0.8'
     }
     implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
     compileOnly "androidx.webkit:webkit:${webKitByCordova[cordovaAndroidMajor]}"

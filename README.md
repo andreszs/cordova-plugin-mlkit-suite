@@ -4,7 +4,7 @@
 
 # cordova-plugin-mlkit-suite
 
-Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. It provides guided face capture, live and still-image barcode scanning, Latin text recognition, and the native Android document scanner.
+Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. It provides guided face capture, live and still-image barcode scanning, image labeling, Latin text recognition, and the native Android document scanner.
 
 > [!WARNING]
 > This plugin is in active development. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
@@ -28,12 +28,14 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 - **Barcode scanning** from the live camera or an existing image on Android and iOS, supporting all available barcode formats, configurable format filters, scan-region enforcement, and consecutive-frame confirmation.
 - **Text recognition v2** for extracting Latin-script text from local images on Android and iOS.
 - **Document scanning** on Android, with page limits, scanner modes, gallery import, JPEG pages, and optional PDF output.
+- **Image labeling** for classifying local images with ML Kit's general-purpose default model on Android and iOS.
 
 | Module | Android | iOS |
 | --- | --- | --- |
 | Barcode scanning | ✅ Live camera and still images | ✅ Live camera and still images |
 | Document scanner | ✅ Available | ❌ Not available |
 | Face detection | ✅ Guided face capture | ✅ Guided face capture |
+| Image labeling | ✅ Default model | ✅ Default model |
 | Text recognition v2 | ✅ Latin script | ✅ Latin script |
 
 Android model delivery is configurable per module. Native plugin UI and errors support automatic, English, and Spanish localization.
@@ -101,7 +103,7 @@ if (result.status === "success") {
 }
 ```
 
-On Android, Face Detection, Barcode Scanning, and OCR default to the smaller Google Play services `install-time` mode. See [Android model delivery](#android-model-delivery) to bundle models or defer their download.
+On Android, Face Detection, Barcode Scanning, Image Labeling, and OCR default to the smaller Google Play services `install-time` mode. See [Android model delivery](#android-model-delivery) to bundle models or defer their download.
 
 ### iOS setup
 
@@ -120,7 +122,7 @@ The plugin requests camera access. Generated images are written to the applicati
 
 ## Android model delivery
 
-Face Detection, Barcode Scanning, and Latin Text Recognition can independently use the official ML Kit [bundled or unbundled installation paths](https://developers.google.com/ml-kit/tips/installation-paths). Document Scanner is always delivered dynamically by Google Play services.
+Face Detection, Barcode Scanning, Image Labeling, and Latin Text Recognition can independently use the official ML Kit [bundled or unbundled installation paths](https://developers.google.com/ml-kit/tips/installation-paths). Document Scanner is always delivered dynamically by Google Play services.
 
 | Mode | Implementation | Download timing | Best fit |
 | --- | --- | --- | --- |
@@ -128,7 +130,7 @@ Face Detection, Barcode Scanning, and Latin Text Recognition can independently u
 | `first-use` | Unbundled | Downloaded when the app first calls that module, unless prepared earlier. | Small app where unused modules should never download. |
 | `bundled` | Bundled | Included in the APK/AAB; no model download. | Immediate offline availability is more important than package size. |
 
-Apply one mode to all three modules during installation:
+Apply one mode to all four modules during installation:
 
 ```bash
 cordova plugin add cordova-plugin-mlkit-suite \
@@ -143,6 +145,7 @@ Module-specific variables override the global value; `inherit` uses the global s
 | `ANDROID_MLKIT_FACE_MODE` | `inherit` | Face Detection |
 | `ANDROID_MLKIT_BARCODE_MODE` | `inherit` | Barcode Scanning |
 | `ANDROID_MLKIT_OCR_MODE` | `inherit` | Latin Text Recognition |
+| `ANDROID_MLKIT_IMAGE_LABELING_MODE` | `inherit` | Image Labeling |
 
 Accepted values are `bundled`, `install-time`, and `first-use`; `play-services` aliases `install-time`. These are build-time settings, so remove and re-add the plugin to change them. Do not edit generated Gradle, manifest, `plugins/`, or `platforms/android/` files.
 
@@ -157,7 +160,7 @@ await MlKit.recognizeText(imagePath, {
 Use `prepareModels()` to download selected modules proactively:
 
 ```javascript
-await MlKit.prepareModels(["barcode", "ocr"], {
+await MlKit.prepareModels(["barcode", "image-labeling", "ocr"], {
     moduleLoadingMessage: "Preparing ML Kit models…"
 });
 ```
@@ -184,9 +187,10 @@ The Google Document Scanner UI is owned by Google Play services and follows the 
 | Method | Android | iOS | Purpose |
 | --- | --- | --- | --- |
 | `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
-| `MlKit.prepareModels(modules?, options?)` | yes | yes | Ensures all or selected Face, Barcode, and Latin OCR modules are ready; bundled modules resolve immediately. |
+| `MlKit.prepareModels(modules?, options?)` | yes | yes | Ensures all or selected Face, Barcode, Image Labeling, and Latin OCR modules are ready; bundled modules resolve immediately. |
 | `MlKit.prepareDocumentScanner(options?)` | Android 7+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
 | `MlKit.scanDocument(options?)` | Android 7+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
+| `MlKit.labelImage(imagePath, options?)` | yes | yes | Returns labels from ML Kit's default image-labeling model. |
 | `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
 | `MlKit.scanBarcodes(imagePath, options?)` | yes | yes | Returns every matching barcode detected in a local image. |
 | `MlKit.barcode.scan(options?)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
@@ -206,7 +210,7 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 }
 ```
 
-The result contains `platform`, localization details, and `face`, `barcode`, `document`, and `text` capability objects. Each module reports its configured `mode`, `ready` state, and `modelStatus` without starting a download. Android can report `mixed` when module modes differ. On iOS, Face, Barcode, and Text are bundled while Document Scanner reports `unsupported`.
+The result contains `platform`, localization details, and `face`, `barcode`, `document`, `imageLabeling`, and `text` capability objects. Each module reports its configured `mode`, `ready` state, and `modelStatus` without starting a download. Android can report `mixed` when module modes differ. On iOS, Face, Barcode, Image Labeling, and Text are bundled while Document Scanner reports `unsupported`.
 
 ### Document scanning
 
@@ -254,7 +258,30 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
 
 Successful results contain `status`, a `pages` array, and an optional `pdf` object. Each page reports `imagePath`, WebView-safe `imageUri`, MIME type, byte size, width, and height. The PDF reports its native `path`, WebView-safe `uri`, MIME type, byte size, and page count.
 
-`pages` is empty when JPEG was not requested and `pdf` is `null` when PDF was not requested. Use `imageUri` inside the Cordova WebView and native paths with APIs such as `recognizeText()` and `scanBarcodes()`.
+`pages` is empty when JPEG was not requested and `pdf` is `null` when PDF was not requested. Use `imageUri` inside the Cordova WebView and native paths with APIs such as `recognizeText()`, `scanBarcodes()`, and `labelImage()`.
+
+### Image labeling
+
+`MlKit.labelImage(imagePath, options?)` uses [ML Kit Image Labeling](https://developers.google.com/ml-kit/vision/image-labeling) to classify one local image with the general-purpose default model. It resolves to an array of labels ordered by the native SDK; an image with no matching labels resolves to `[]`.
+
+```javascript
+const labels = await MlKit.labelImage(imagePath, {
+    confidenceThreshold: 0.6,
+    moduleLoadingMessage: "Loading image labeling…"
+});
+
+for (const label of labels) {
+    console.log(label.text, label.confidence, label.index);
+}
+```
+
+```json
+[
+  { "text": "Food", "confidence": 0.93, "index": 12 }
+]
+```
+
+`confidenceThreshold` is an optional number from `0` to `1`; ML Kit's native default is used when omitted. Each result contains `text`, `confidence`, and the default model's `index`. Android follows the configured delivery mode; iOS bundles the model.
 
 ### Text recognition
 
@@ -430,6 +457,7 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 ### Known limitations
 
 - The Google Document Scanner always allows basic page editing, including crop and rotation; its native UI cannot be configured as an immutable front/back capture flow.
+- Image labeling currently uses ML Kit's general-purpose default model; custom models are not yet supported.
 - Text recognition currently includes only the Latin script recognizer.
 - Face detection is not face recognition, identity verification, liveness detection, or presentation-attack detection.
 - Face quality thresholds are heuristics and require calibration across devices, skin tones, lighting, optics, and accessibility needs.

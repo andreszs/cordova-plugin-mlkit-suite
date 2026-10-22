@@ -64,6 +64,7 @@
 "image_open_failed" = "Unable to open imagePath.";
 "text_recognition_failed" = "Unable to recognize text in the image.";
 "barcode_image_failed" = "Unable to scan barcodes in the image.";
+"image_labeling_failed" = "Unable to label the image.";
 "camera_permission_denied" = "Camera permission was denied.";
 "camera_permission_unknown" = "Unable to determine camera permission.";
 "view_controller_unavailable" = "The application view controller is unavailable.";

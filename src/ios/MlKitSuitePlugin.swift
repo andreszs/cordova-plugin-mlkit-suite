@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import MLKitBarcodeScanning
+import MLKitImageLabeling
 import MLKitVision
 import UIKit
 import WebKit
@@ -58,6 +59,15 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "ready": false,
                 "modelStatus": "unsupported"
             ],
+            "imageLabeling": [
+                "label": true,
+                "mode": "bundled",
+                "bundled": true,
+                "ready": true,
+                "modelStatus": "bundled",
+                "defaultModel": true,
+                "labels": "400+"
+            ],
             "text": [
                 "recognize": true,
                 "mode": "bundled",
@@ -71,6 +81,83 @@ final class MlKitSuitePlugin: CDVPlugin {
             CDVPluginResult(status: CDVCommandStatus.ok, messageAs: payload),
             callbackId: command.callbackId
         )
+    }
+
+    @objc(labelImage:)
+    func labelImage(_ command: CDVInvokedUrlCommand) {
+        let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
+        let localization: MlKitLocalization
+        do {
+            localization = try MlKitLocalization(dictionary: dictionary)
+            for key in dictionary.keys where key != "confidenceThreshold"
+                && key != "moduleLoadingMessage" && key != "locale" {
+                throw MlKitSuiteError.invalidArgument("Unknown image labeling option: \(key).")
+            }
+        } catch let error as MlKitSuiteError {
+            sendErrorPayload(callbackId: command.callbackId, payload: error.payload)
+            return
+        } catch {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: error.localizedDescription, recoverable: false)
+            return
+        }
+        guard let rawPath = command.argument(at: 0) as? String,
+              !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                      message: "imagePath must be a non-empty string.", recoverable: false)
+            return
+        }
+
+        let threshold: NSNumber?
+        if let rawThreshold = dictionary["confidenceThreshold"] {
+            guard let number = rawThreshold as? NSNumber,
+                  CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite,
+                  (0.0...1.0).contains(number.doubleValue) else {
+                sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
+                          message: "confidenceThreshold must be a number from 0 to 1.",
+                          recoverable: false)
+                return
+            }
+            threshold = number
+        } else {
+            threshold = nil
+        }
+
+        commandDelegate.run(inBackground: { [weak self] in
+            guard let self = self else { return }
+            do {
+                let image = try self.visionImage(rawPath)
+                let options = ImageLabelerOptions()
+                if let threshold = threshold {
+                    options.confidenceThreshold = threshold
+                }
+                let labeler = ImageLabeler.imageLabeler(options: options)
+                labeler.process(image) { labels, error in
+                    if error != nil || labels == nil {
+                        self.sendError(
+                            callbackId: command.callbackId, code: "PROCESSING_FAILED",
+                            message: localization.text("image_labeling_failed"), recoverable: true
+                        )
+                        return
+                    }
+                    let payload: [[String: Any]] = (labels ?? []).map {
+                        [
+                            "text": $0.text,
+                            "confidence": Double($0.confidence),
+                            "index": $0.index
+                        ]
+                    }
+                    self.commandDelegate.send(
+                        CDVPluginResult(status: CDVCommandStatus.ok, messageAs: payload),
+                        callbackId: command.callbackId
+                    )
+                }
+            } catch {
+                self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
+                               message: localization.text("image_open_failed"), recoverable: false)
+            }
+        })
     }
 
     @objc(prepareModels:)

@@ -57,10 +57,10 @@ exports.getCapabilities = function getCapabilities() {
 
 /**
  * Ensures that selected Play services ML Kit modules are ready. Omit modules
- * to prepare Face Detection, Barcode Scanning, and Latin OCR. Bundled modules
+ * to prepare Face Detection, Barcode Scanning, Image Labeling, and Latin OCR. Bundled modules
  * are ignored because they are already available.
  *
- * @param {string|string[]|object} [modules] face, barcode, ocr, an array, or
+ * @param {string|string[]|object} [modules] face, barcode, image-labeling, ocr, an array, or
  *        the options object when preparing every module.
  * @param {{moduleLoadingMessage?: string|null, locale?: string}} [options]
  *        Native loading text and UI locale (`auto`, `en`, `es`, or BCP-47).
@@ -79,12 +79,13 @@ exports.prepareModels = function prepareModels(modules, options) {
     }
     var requested = typeof modules === 'string' ? [modules] : modules;
     var valid = Array.isArray(requested) && requested.length > 0 && requested.every(function (module) {
-        return typeof module === 'string' && ['face', 'barcode', 'ocr'].indexOf(module.trim().toLowerCase()) !== -1;
+        return typeof module === 'string'
+            && ['face', 'barcode', 'image-labeling', 'ocr'].indexOf(module.trim().toLowerCase()) !== -1;
     });
     if (!valid) {
         return Promise.reject({
             code: 'INVALID_ARGUMENT',
-            message: 'modules must be face, barcode, ocr, or an array containing those names.',
+            message: 'modules must be face, barcode, image-labeling, ocr, or an array containing those names.',
             recoverable: false
         });
     }
@@ -138,6 +139,39 @@ exports.recognizeText = function recognizeText(imagePath, options) {
     var loadingError = rejectInvalidModuleLoadingMessage(options);
     if (loadingError) return loadingError;
     return options ? call('recognizeText', [imagePath, options]) : call('recognizeText', [imagePath]);
+};
+
+/**
+ * Classifies an existing local image with ML Kit's default image-labeling model.
+ *
+ * @param {string} imagePath Native path, file/content URI, or plugin image URI.
+ * @param {{confidenceThreshold?: number, moduleLoadingMessage?: string|null,
+ *          locale?: string}} [options] Optional settings.
+ * @returns {Promise<Array<{text: string, confidence: number, index: number}>>}
+ */
+exports.labelImage = function labelImage(imagePath, options) {
+    if (typeof imagePath !== 'string' || !imagePath.trim()) {
+        return Promise.reject({
+            code: 'INVALID_ARGUMENT',
+            message: 'imagePath must be a non-empty string.',
+            recoverable: false
+        });
+    }
+    options = options || {};
+    if (Object.prototype.hasOwnProperty.call(options, 'confidenceThreshold')) {
+        var threshold = options.confidenceThreshold;
+        if (typeof threshold !== 'number' || !isFinite(threshold)
+            || threshold < 0 || threshold > 1) {
+            return Promise.reject({
+                code: 'INVALID_ARGUMENT',
+                message: 'confidenceThreshold must be a number from 0 to 1.',
+                recoverable: false
+            });
+        }
+    }
+    var loadingError = rejectInvalidModuleLoadingMessage(options);
+    if (loadingError) return loadingError;
+    return call('labelImage', [imagePath, options]);
 };
 
 /**

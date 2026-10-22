@@ -28,7 +28,7 @@ Promise.resolve()
     .then(function () { return MlKit.getCapabilities(); })
     .then(function () { return MlKit.prepareModels(); })
     .then(function () {
-        return MlKit.prepareModels(['barcode', 'ocr'], {
+        return MlKit.prepareModels(['barcode', 'image-labeling', 'ocr'], {
             moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR'
         });
     })
@@ -55,6 +55,16 @@ Promise.resolve()
     })
     .then(function () {
         return MlKit.scanBarcodes('/cache/page-2.jpg', { formats: ['PDF_417'] });
+    })
+    .then(function () {
+        return MlKit.labelImage('/cache/photo.jpg', { confidenceThreshold: 0.6 });
+    })
+    .then(function () {
+        return MlKit.labelImage('/cache/photo.jpg', { confidenceThreshold: 2 }).then(function () {
+            throw new Error('Expected an invalid confidence threshold to reject.');
+        }, function (error) {
+            assert.strictEqual(error.code, 'INVALID_ARGUMENT');
+        });
     })
     .then(function () {
         return MlKit.prepareModels([]).then(function () {
@@ -101,7 +111,9 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'getCapabilities', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [] },
             { service: 'MlKitSuite', action: 'prepareModels', args: [
-                ['barcode', 'ocr'], { moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR' }
+                ['barcode', 'image-labeling', 'ocr'], {
+                    moduleLoadingMessage: 'Cargando módulos…', locale: 'es-AR'
+                }
             ] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{
                 timeoutMs: 1000, moduleLoadingMessage: '', locale: 'es'
@@ -121,6 +133,9 @@ Promise.resolve()
                 '/cache/page-1.jpg', { moduleLoadingMessage: 'Cargando OCR…' }
             ] },
             { service: 'MlKitSuite', action: 'scanBarcodes', args: ['/cache/page-2.jpg', { formats: ['PDF_417'] }] },
+            { service: 'MlKitSuite', action: 'labelImage', args: [
+                '/cache/photo.jpg', { confidenceThreshold: 0.6 }
+            ] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] }
         ]);

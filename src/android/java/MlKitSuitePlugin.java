@@ -36,6 +36,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         "com.andreszs.plugins.mlkitsuite.BARCODE_MODE";
     private static final String OCR_MODE_METADATA =
         "com.andreszs.plugins.mlkitsuite.OCR_MODE";
+    private static final String IMAGE_LABELING_MODE_METADATA =
+        "com.andreszs.plugins.mlkitsuite.IMAGE_LABELING_MODE";
 
     private CallbackContext pendingCallback;
     private JSONObject pendingOptions;
@@ -53,6 +55,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
         if ("scanBarcodes".equals(action)) {
             processBarcodes(args, callbackContext);
+            return true;
+        }
+        if ("labelImage".equals(action)) {
+            processImageLabels(args, callbackContext);
             return true;
         }
         if ("prepareModels".equals(action)) {
@@ -263,13 +269,19 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject face = new JSONObject();
         JSONObject barcode = new JSONObject();
         JSONObject document = new JSONObject();
+        JSONObject imageLabeling = new JSONObject();
         JSONObject text = new JSONObject();
         JSONObject localization = new JSONObject();
         String faceMode = androidModuleMode(FACE_MODE_METADATA);
         String barcodeMode = androidModuleMode(BARCODE_MODE_METADATA);
         String ocrMode = androidModuleMode(OCR_MODE_METADATA);
-        String modelDelivery = aggregateDelivery(faceMode, barcodeMode, ocrMode);
-        String modelDownloadStrategy = aggregateMode(faceMode, barcodeMode, ocrMode);
+        String imageLabelingMode = androidModuleMode(IMAGE_LABELING_MODE_METADATA);
+        String modelDelivery = aggregateDelivery(
+            faceMode, barcodeMode, ocrMode, imageLabelingMode
+        );
+        String modelDownloadStrategy = aggregateMode(
+            faceMode, barcodeMode, ocrMode, imageLabelingMode
+        );
         try {
             root.put("platform", "android");
             root.put("offline", false);
@@ -317,6 +329,13 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 document.put("ready", false);
                 document.put("modelStatus", "unsupported");
             }
+            root.put("imageLabeling", imageLabeling);
+            imageLabeling.put("label", true);
+            imageLabeling.put("mode", imageLabelingMode);
+            imageLabeling.put("bundled", "bundled".equals(imageLabelingMode));
+            putInitialModelStatus(imageLabeling, imageLabelingMode);
+            imageLabeling.put("defaultModel", true);
+            imageLabeling.put("labels", "400+");
             root.put("text", text);
             text.put("recognize", true);
             text.put("mode", ocrMode);
@@ -331,17 +350,23 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject result = capabilities();
         JSONObject face = result.optJSONObject("face");
         JSONObject barcode = result.optJSONObject("barcode");
+        JSONObject imageLabeling = result.optJSONObject("imageLabeling");
         JSONObject text = result.optJSONObject("text");
         boolean checkFace = face != null && !face.optBoolean("bundled");
         boolean checkBarcode = barcode != null && !barcode.optBoolean("bundled");
         boolean checkText = text != null && !text.optBoolean("bundled");
+        boolean checkImageLabeling = imageLabeling != null
+            && !imageLabeling.optBoolean("bundled");
         Activity activity = cordova.getActivity();
 
         activity.runOnUiThread(() -> MlKitModelsModuleInstaller.checkAvailability(
-            activity, checkFace, checkBarcode, checkText, availability -> {
+            activity, checkFace, checkBarcode, checkText, checkImageLabeling, availability -> {
                 mergeRuntimeModelStatus(face, availability.optJSONObject("face"));
                 mergeRuntimeModelStatus(barcode, availability.optJSONObject("barcode"));
                 mergeRuntimeModelStatus(text, availability.optJSONObject("text"));
+                mergeRuntimeModelStatus(
+                    imageLabeling, availability.optJSONObject("imageLabeling")
+                );
                 JSONObject document = result.optJSONObject("document");
                 if (document == null || !document.optBoolean("deviceSupported")) {
                     callbackContext.success(result);
@@ -398,17 +423,25 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         return "install-time";
     }
 
-    private static String aggregateDelivery(String faceMode, String barcodeMode, String ocrMode) {
+    private static String aggregateDelivery(String faceMode, String barcodeMode, String ocrMode,
+                                            String imageLabelingMode) {
         boolean faceBundled = "bundled".equals(faceMode);
         boolean barcodeBundled = "bundled".equals(barcodeMode);
         boolean ocrBundled = "bundled".equals(ocrMode);
-        if (faceBundled && barcodeBundled && ocrBundled) return "bundled";
-        if (!faceBundled && !barcodeBundled && !ocrBundled) return "play-services";
+        boolean imageLabelingBundled = "bundled".equals(imageLabelingMode);
+        if (faceBundled && barcodeBundled && ocrBundled && imageLabelingBundled) {
+            return "bundled";
+        }
+        if (!faceBundled && !barcodeBundled && !ocrBundled && !imageLabelingBundled) {
+            return "play-services";
+        }
         return "mixed";
     }
 
-    private static String aggregateMode(String faceMode, String barcodeMode, String ocrMode) {
-        return faceMode.equals(barcodeMode) && faceMode.equals(ocrMode) ? faceMode : "mixed";
+    private static String aggregateMode(String faceMode, String barcodeMode, String ocrMode,
+                                        String imageLabelingMode) {
+        return faceMode.equals(barcodeMode) && faceMode.equals(ocrMode)
+            && faceMode.equals(imageLabelingMode) ? faceMode : "mixed";
     }
 
     private void processText(JSONArray args, CallbackContext callbackContext) {
@@ -422,7 +455,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 return;
             }
             String loadingMessage = moduleLoadingMessage(options);
-            ensureModelsAvailable(false, false, true, loadingMessage, localization,
+            ensureModelsAvailable(false, false, true, false, loadingMessage, localization,
                 callbackContext, () -> {
                 File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
                 cordova.getThreadPool().execute(() -> StaticImageProcessor.recognizeText(
@@ -488,7 +521,9 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             && !"bundled".equals(androidModuleMode(BARCODE_MODE_METADATA));
         boolean prepareOcr = requestedModules.contains("ocr")
             && !"bundled".equals(androidModuleMode(OCR_MODE_METADATA));
-        if (!prepareFace && !prepareBarcode && !prepareOcr) {
+        boolean prepareImageLabeling = requestedModules.contains("image-labeling")
+            && !"bundled".equals(androidModuleMode(IMAGE_LABELING_MODE_METADATA));
+        if (!prepareFace && !prepareBarcode && !prepareOcr && !prepareImageLabeling) {
             JSONObject result = new JSONObject();
             try {
                 result.put("status", "ready");
@@ -498,7 +533,8 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return;
         }
         cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
-            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, loadingMessage,
+            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr,
+            prepareImageLabeling, loadingMessage,
             localization,
             new MlKitModelsModuleInstaller.Callback() {
                 @Override
@@ -521,6 +557,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             result.add("face");
             result.add("barcode");
             result.add("ocr");
+            result.add("image-labeling");
             return result;
         }
         if (requested instanceof String) {
@@ -536,7 +573,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 Object value = array.opt(index);
                 if (!(value instanceof String)) {
                     throw new IllegalArgumentException(
-                        "modules may contain only face, barcode, or ocr."
+                        "modules may contain only face, barcode, image-labeling, or ocr."
                     );
                 }
                 addRequestedModule(result, (String) value);
@@ -544,15 +581,17 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             return result;
         }
         throw new IllegalArgumentException(
-            "modules must be face, barcode, ocr, or an array containing those names."
+            "modules must be face, barcode, image-labeling, ocr, or an array containing those names."
         );
     }
 
     private static void addRequestedModule(Set<String> modules, String rawValue) {
         String value = rawValue == null ? "" : rawValue.trim().toLowerCase(Locale.US);
-        if (!("face".equals(value) || "barcode".equals(value) || "ocr".equals(value))) {
+        if (!("face".equals(value) || "barcode".equals(value)
+            || "image-labeling".equals(value) || "ocr".equals(value))) {
             throw new IllegalArgumentException(
-                "Unknown module '" + rawValue + "'. Use face, barcode, or ocr."
+                "Unknown module '" + rawValue
+                    + "'. Use face, barcode, image-labeling, or ocr."
             );
         }
         modules.add(value);
@@ -570,7 +609,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             }
             int[] formats = BarcodeScanConfig.imageFormatValuesFromJson(options);
             String loadingMessage = moduleLoadingMessage(options);
-            ensureModelsAvailable(false, true, false, loadingMessage, localization,
+            ensureModelsAvailable(false, true, false, false, loadingMessage, localization,
                 callbackContext, () -> {
                 File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
                 cordova.getThreadPool().execute(() -> StaticImageProcessor.scanBarcodes(
@@ -583,9 +622,50 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         }
     }
 
+    private void processImageLabels(JSONArray args, CallbackContext callbackContext) {
+        String imagePath = args.optString(0, "").trim();
+        try {
+            JSONObject options = optionsAt(args, 1, "options");
+            MlKitLocalization localization = localization(options);
+            if (imagePath.isEmpty()) {
+                callbackContext.error(error("INVALID_ARGUMENT",
+                    "imagePath must be a non-empty string.", false));
+                return;
+            }
+            Float threshold = null;
+            if (options.has("confidenceThreshold") && !options.isNull("confidenceThreshold")) {
+                Object rawThreshold = options.opt("confidenceThreshold");
+                if (!(rawThreshold instanceof Number)) {
+                    throw new IllegalArgumentException(
+                        "confidenceThreshold must be a number from 0 to 1."
+                    );
+                }
+                float value = ((Number) rawThreshold).floatValue();
+                if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f || value > 1f) {
+                    throw new IllegalArgumentException(
+                        "confidenceThreshold must be a number from 0 to 1."
+                    );
+                }
+                threshold = value;
+            }
+            Float confidenceThreshold = threshold;
+            String loadingMessage = moduleLoadingMessage(options);
+            ensureModelsAvailable(false, false, false, true, loadingMessage, localization,
+                callbackContext, () -> {
+                File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
+                cordova.getThreadPool().execute(() -> StaticImageProcessor.labelImage(
+                    cordova.getActivity().getApplicationContext(), imagePath, cache,
+                    confidenceThreshold, localization, callbackContext
+                ));
+            });
+        } catch (IllegalArgumentException exception) {
+            callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
+        }
+    }
+
     private void preparePendingCameraModule(String loadingMessage, CallbackContext owner) {
         boolean face = "faceCapture".equals(pendingAction);
-        ensureModelsAvailable(face, !face, false, loadingMessage,
+        ensureModelsAvailable(face, !face, false, false, loadingMessage,
             localization(pendingOptions), owner, () -> {
             if (pendingCallback != owner) return;
             launchPendingActivity();
@@ -614,15 +694,18 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
     }
 
     private void ensureModelsAvailable(boolean face, boolean barcode, boolean ocr,
+                                       boolean imageLabeling,
                                        String loadingMessage, MlKitLocalization localization,
                                        CallbackContext callbackContext,
                                        Runnable onReady) {
         ensureModelsAvailable(
-            face, barcode, ocr, loadingMessage, localization, callbackContext, onReady, null
+            face, barcode, ocr, imageLabeling, loadingMessage, localization,
+            callbackContext, onReady, null
         );
     }
 
     private void ensureModelsAvailable(boolean face, boolean barcode, boolean ocr,
+                                       boolean imageLabeling,
                                        String loadingMessage, MlKitLocalization localization,
                                        CallbackContext callbackContext,
                                        Runnable onReady, Runnable onErrorCleanup) {
@@ -630,12 +713,15 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         boolean prepareBarcode = barcode
             && !"bundled".equals(androidModuleMode(BARCODE_MODE_METADATA));
         boolean prepareOcr = ocr && !"bundled".equals(androidModuleMode(OCR_MODE_METADATA));
-        if (!prepareFace && !prepareBarcode && !prepareOcr) {
+        boolean prepareImageLabeling = imageLabeling
+            && !"bundled".equals(androidModuleMode(IMAGE_LABELING_MODE_METADATA));
+        if (!prepareFace && !prepareBarcode && !prepareOcr && !prepareImageLabeling) {
             onReady.run();
             return;
         }
         cordova.getActivity().runOnUiThread(() -> MlKitModelsModuleInstaller.prepare(
-            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr, loadingMessage,
+            cordova.getActivity(), prepareFace, prepareBarcode, prepareOcr,
+            prepareImageLabeling, loadingMessage,
             localization,
             new MlKitModelsModuleInstaller.Callback() {
                 @Override

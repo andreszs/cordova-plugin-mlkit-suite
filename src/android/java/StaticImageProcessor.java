@@ -10,6 +10,10 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
 import com.google.mlkit.vision.barcode.BarcodeScanning;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.label.ImageLabel;
+import com.google.mlkit.vision.label.ImageLabeler;
+import com.google.mlkit.vision.label.ImageLabeling;
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
@@ -83,6 +87,37 @@ final class StaticImageProcessor {
             });
     }
 
+    static void labelImage(Context context, String rawPath, File cacheDirectory,
+                           Float confidenceThreshold, MlKitLocalization localization,
+                           CallbackContext callback) {
+        InputImage image;
+        try {
+            image = resolveImage(context, rawPath, cacheDirectory);
+        } catch (Exception exception) {
+            callback.error(MlKitSuitePlugin.error(
+                "INVALID_IMAGE", localization.text("image_open_failed"), false
+            ));
+            return;
+        }
+        ImageLabelerOptions options = confidenceThreshold == null
+            ? ImageLabelerOptions.DEFAULT_OPTIONS
+            : new ImageLabelerOptions.Builder()
+                .setConfidenceThreshold(confidenceThreshold)
+                .build();
+        ImageLabeler labeler = ImageLabeling.getClient(options);
+        labeler.process(image)
+            .addOnSuccessListener(labels -> {
+                callback.success(labelsToJson(labels));
+                labeler.close();
+            })
+            .addOnFailureListener(error -> {
+                callback.error(MlKitSuitePlugin.error(
+                    "PROCESSING_FAILED", localization.text("image_labeling_failed"), true
+                ));
+                labeler.close();
+            });
+    }
+
     private static InputImage resolveImage(Context context, String rawPath, File cacheDirectory)
         throws Exception {
         if (rawPath == null || rawPath.trim().isEmpty()) {
@@ -143,6 +178,20 @@ final class StaticImageProcessor {
                     }
                 }
                 value.put("cornerPoints", points);
+                values.put(value);
+            } catch (Exception ignored) { }
+        }
+        return values;
+    }
+
+    private static JSONArray labelsToJson(List<ImageLabel> labels) {
+        JSONArray values = new JSONArray();
+        for (ImageLabel label : labels) {
+            JSONObject value = new JSONObject();
+            try {
+                value.put("text", label.getText());
+                value.put("confidence", label.getConfidence());
+                value.put("index", label.getIndex());
                 values.put(value);
             } catch (Exception ignored) { }
         }
