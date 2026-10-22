@@ -138,7 +138,7 @@ logger.lifecycle(
     "Barcode ${barcodeMode} (${barcodeMode == 'bundled' ? '17.2.0' : '18.3.1'}), " +
     "OCR ${ocrMode} (${ocrMode == 'bundled' ? '16.0.1' : '19.0.1'}), " +
     "Image Labeling ${imageLabelingMode} (${imageLabelingMode == 'bundled' ? '17.0.9' : '16.0.8'}), " +
-    'Document Scanner 16.0.0'
+    'Selfie Segmentation bundled (16.0.0-beta6), Document Scanner 16.0.0'
 )
 
 android {
@@ -191,6 +191,7 @@ dependencies {
         implementation 'com.google.android.gms:play-services-mlkit-image-labeling:16.0.8'
     }
     implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
+    implementation 'com.google.mlkit:segmentation-selfie:16.0.0-beta6'
     compileOnly "androidx.webkit:webkit:${webKitByCordova[cordovaAndroidMajor]}"
 }
 

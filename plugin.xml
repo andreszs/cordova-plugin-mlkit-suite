@@ -5,9 +5,9 @@
         id="cordova-plugin-mlkit-suite"
         version="0.1.0">
     <name>ML Kit Suite</name>
-    <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, and guided face processing.</description>
+    <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, selfie segmentation, and guided face processing.</description>
     <license>MIT</license>
-    <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,image-labeling,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+    <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,image-labeling,selfie-segmentation,background-removal,pdf417,qr-code,camera,camerax,avfoundation</keywords>
 
     <engines>
         <engine name="cordova" version=">=11.0.0" />
@@ -97,6 +97,7 @@
         <source-file src="src/android/java/MlKitModelsModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/MlKitLoadingDialog.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/StaticImageProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/SelfieSegmentationProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
     </platform>
 
     <platform name="ios">
@@ -116,6 +117,7 @@
         <source-file src="src/ios/BarcodeOverlayView.swift" />
         <source-file src="src/ios/BarcodeScanViewController.swift" />
         <source-file src="src/ios/TextRecognitionProcessor.swift" />
+        <source-file src="src/ios/SelfieSegmentationProcessor.swift" />
         <source-file src="src/ios/MlKitSuitePlugin.swift" />
         <resource-file src="src/ios/MlKitSuitePrivacy.bundle" target="MlKitSuitePrivacy.bundle" />
         <resource-file src="src/ios/MlKitSuiteResources.bundle" target="MlKitSuiteResources.bundle" />
@@ -133,6 +135,7 @@
                 <pod name="GoogleMLKit/TextRecognition" spec="8.0.0" />
                 <pod name="GoogleMLKit/BarcodeScanning" spec="8.0.0" />
                 <pod name="GoogleMLKit/ImageLabeling" spec="8.0.0" />
+                <pod name="GoogleMLKit/SegmentationSelfie" spec="8.0.0" />
             </pods>
         </podspec>
     </platform>

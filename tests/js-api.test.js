@@ -60,6 +60,16 @@ Promise.resolve()
         return MlKit.labelImage('/cache/photo.jpg', { confidenceThreshold: 0.6 });
     })
     .then(function () {
+        return MlKit.segmentSelfie('/cache/selfie.jpg', { maxDimension: 1600 });
+    })
+    .then(function () {
+        return MlKit.segmentSelfie('/cache/selfie.jpg', { maxDimension: 128 }).then(function () {
+            throw new Error('Expected an invalid maximum dimension to reject.');
+        }, function (error) {
+            assert.strictEqual(error.code, 'INVALID_ARGUMENT');
+        });
+    })
+    .then(function () {
         return MlKit.labelImage('/cache/photo.jpg', { confidenceThreshold: 2 }).then(function () {
             throw new Error('Expected an invalid confidence threshold to reject.');
         }, function (error) {
@@ -135,6 +145,9 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'scanBarcodes', args: ['/cache/page-2.jpg', { formats: ['PDF_417'] }] },
             { service: 'MlKitSuite', action: 'labelImage', args: [
                 '/cache/photo.jpg', { confidenceThreshold: 0.6 }
+            ] },
+            { service: 'MlKitSuite', action: 'segmentSelfie', args: [
+                '/cache/selfie.jpg', { maxDimension: 1600 }
             ] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] },
             { service: 'MlKitSuite', action: 'faceCapture', args: [{}] }

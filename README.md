@@ -4,7 +4,7 @@
 
 # cordova-plugin-mlkit-suite
 
-Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. It provides guided face capture, live and still-image barcode scanning, image labeling, Latin text recognition, and the native Android document scanner.
+Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. It provides guided face capture, live and still-image barcode scanning, image labeling, selfie segmentation, Latin text recognition, and the native Android document scanner.
 
 > [!WARNING]
 > This plugin is in active development. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.
@@ -29,6 +29,7 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 - **Text recognition v2** for extracting Latin-script text from local images on Android and iOS.
 - **Document scanning** on Android, with page limits, scanner modes, gallery import, JPEG pages, and optional PDF output.
 - **Image labeling** for classifying local images with ML Kit's general-purpose default model on Android and iOS.
+- **Selfie segmentation** for separating people from the background and producing a transparent PNG on Android and iOS.
 
 | Module | Android | iOS |
 | --- | --- | --- |
@@ -36,6 +37,7 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 | Document scanner | ✅ Available | ❌ Not available |
 | Face detection | ✅ Guided face capture | ✅ Guided face capture |
 | Image labeling | ✅ Default model | ✅ Default model |
+| Selfie segmentation | ✅ Transparent PNG | ✅ Transparent PNG |
 | Text recognition v2 | ✅ Latin script | ✅ Latin script |
 
 Android model delivery is configurable per module. Native plugin UI and errors support automatic, English, and Spanish localization.
@@ -103,7 +105,7 @@ if (result.status === "success") {
 }
 ```
 
-On Android, Face Detection, Barcode Scanning, Image Labeling, and OCR default to the smaller Google Play services `install-time` mode. See [Android model delivery](#android-model-delivery) to bundle models or defer their download.
+On Android, Face Detection, Barcode Scanning, Image Labeling, and OCR default to the smaller Google Play services `install-time` mode. Selfie Segmentation is always bundled by ML Kit. See [Android model delivery](#android-model-delivery) to bundle configurable models or defer their download.
 
 ### iOS setup
 
@@ -122,7 +124,7 @@ The plugin requests camera access. Generated images are written to the applicati
 
 ## Android model delivery
 
-Face Detection, Barcode Scanning, Image Labeling, and Latin Text Recognition can independently use the official ML Kit [bundled or unbundled installation paths](https://developers.google.com/ml-kit/tips/installation-paths). Document Scanner is always delivered dynamically by Google Play services.
+Face Detection, Barcode Scanning, Image Labeling, and Latin Text Recognition can independently use the official ML Kit [bundled or unbundled installation paths](https://developers.google.com/ml-kit/tips/installation-paths). Document Scanner is always delivered dynamically by Google Play services. Selfie Segmentation only supports ML Kit's bundled installation path and is unaffected by these variables.
 
 | Mode | Implementation | Download timing | Best fit |
 | --- | --- | --- | --- |
@@ -191,6 +193,7 @@ The Google Document Scanner UI is owned by Google Play services and follows the 
 | `MlKit.prepareDocumentScanner(options?)` | Android 7+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
 | `MlKit.scanDocument(options?)` | Android 7+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
 | `MlKit.labelImage(imagePath, options?)` | yes | yes | Returns labels from ML Kit's default image-labeling model. |
+| `MlKit.segmentSelfie(imagePath, options?)` | yes | yes | Creates a transparent PNG containing the people found in a local image. |
 | `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
 | `MlKit.scanBarcodes(imagePath, options?)` | yes | yes | Returns every matching barcode detected in a local image. |
 | `MlKit.barcode.scan(options?)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
@@ -210,7 +213,7 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 }
 ```
 
-The result contains `platform`, localization details, and `face`, `barcode`, `document`, `imageLabeling`, and `text` capability objects. Each module reports its configured `mode`, `ready` state, and `modelStatus` without starting a download. Android can report `mixed` when module modes differ. On iOS, Face, Barcode, Image Labeling, and Text are bundled while Document Scanner reports `unsupported`.
+The result contains `platform`, localization details, and `face`, `barcode`, `document`, `imageLabeling`, `selfieSegmentation`, and `text` capability objects. Each module reports its configured `mode`, `ready` state, and `modelStatus` without starting a download. Android can report `mixed` when configurable module modes differ. Selfie Segmentation is bundled on both platforms. On iOS, Face, Barcode, Image Labeling, Selfie Segmentation, and Text are bundled while Document Scanner reports `unsupported`.
 
 ### Document scanning
 
@@ -258,7 +261,7 @@ Unknown options, invalid types, empty result formats, and out-of-range values re
 
 Successful results contain `status`, a `pages` array, and an optional `pdf` object. Each page reports `imagePath`, WebView-safe `imageUri`, MIME type, byte size, width, and height. The PDF reports its native `path`, WebView-safe `uri`, MIME type, byte size, and page count.
 
-`pages` is empty when JPEG was not requested and `pdf` is `null` when PDF was not requested. Use `imageUri` inside the Cordova WebView and native paths with APIs such as `recognizeText()`, `scanBarcodes()`, and `labelImage()`.
+`pages` is empty when JPEG was not requested and `pdf` is `null` when PDF was not requested. Use `imageUri` inside the Cordova WebView and native paths with APIs such as `recognizeText()`, `scanBarcodes()`, `labelImage()`, and `segmentSelfie()`.
 
 ### Image labeling
 
@@ -282,6 +285,21 @@ for (const label of labels) {
 ```
 
 `confidenceThreshold` is an optional number from `0` to `1`; ML Kit's native default is used when omitted. Each result contains `text`, `confidence`, and the default model's `index`. Android follows the configured delivery mode; iOS bundles the model.
+
+### Selfie segmentation
+
+`MlKit.segmentSelfie(imagePath, options?)` uses [ML Kit Selfie Segmentation](https://developers.google.com/ml-kit/vision/selfie-segmentation) in single-image mode. It separates every person from the background and writes a temporary PNG whose alpha channel contains ML Kit's foreground-confidence mask.
+
+```javascript
+const result = await MlKit.segmentSelfie(imagePath, {
+    maxDimension: 2048
+});
+
+document.querySelector("img").src = result.imageUri;
+console.log(result.imagePath, result.width, result.height, result.bytes);
+```
+
+The successful result contains `status`, WebView-safe `imageUri`, native `imagePath`, `width`, `height`, `mimeType: "image/png"`, and `bytes`. `maxDimension` accepts an integer from `256` to `4096` and defaults to `2048`; larger inputs are proportionally reduced before processing. The model is bundled on Android and iOS, so this method never triggers a Play services download.
 
 ### Text recognition
 
@@ -450,7 +468,7 @@ The plugin uses Google ML Kit, [AndroidX CameraX](https://developer.android.com/
 
 ### Privacy
 
-The plugin requests camera permission and processes camera frames and selected local images. It does not include analytics, advertising, network upload code, face recognition, or persistent biometric storage. The document scanner is provided dynamically through Google Play services. The host application controls returned files and is responsible for privacy disclosures, consent, retention, transport security, and regulatory compliance.
+The plugin requests camera permission and processes camera frames and selected local images. It does not include analytics, advertising, network upload code, face recognition, or persistent biometric storage. The document scanner is provided dynamically through Google Play services; Selfie Segmentation is statically bundled. The host application controls returned files and is responsible for privacy disclosures, consent, retention, transport security, and regulatory compliance.
 
 The included Apple privacy manifest declares no tracking, collected data, or required-reason API use by the plugin itself. Host applications and transitive SDKs must provide their own accurate manifests.
 
@@ -458,6 +476,7 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 
 - The Google Document Scanner always allows basic page editing, including crop and rotation; its native UI cannot be configured as an immutable front/back capture flow.
 - Image labeling currently uses ML Kit's general-purpose default model; custom models are not yet supported.
+- Selfie Segmentation is a beta ML Kit API. Hair, motion blur, occlusion, and low foreground/background contrast can produce imperfect edges.
 - Text recognition currently includes only the Latin script recognizer.
 - Face detection is not face recognition, identity verification, liveness detection, or presentation-attack detection.
 - Face quality thresholds are heuristics and require calibration across devices, skin tones, lighting, optics, and accessibility needs.

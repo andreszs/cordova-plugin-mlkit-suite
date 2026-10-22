@@ -123,6 +123,14 @@ final class StaticImageProcessor {
         if (rawPath == null || rawPath.trim().isEmpty()) {
             throw new IllegalArgumentException("imagePath is empty.");
         }
+        Uri uri = resolveUri(rawPath, cacheDirectory);
+        return InputImage.fromFilePath(context, uri);
+    }
+
+    static Uri resolveUri(String rawPath, File cacheDirectory) throws Exception {
+        if (rawPath == null || rawPath.trim().isEmpty()) {
+            throw new IllegalArgumentException("imagePath is empty.");
+        }
         String value = rawPath.trim();
         Uri uri;
         Uri parsed = Uri.parse(value);
@@ -143,7 +151,7 @@ final class StaticImageProcessor {
             if (!file.isFile()) throw new IllegalArgumentException("Image file does not exist.");
             uri = Uri.fromFile(file);
         }
-        return InputImage.fromFilePath(context, uri);
+        return uri;
     }
 
     private static JSONArray toJson(List<Barcode> barcodes) {

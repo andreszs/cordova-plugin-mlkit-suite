@@ -175,6 +175,39 @@ exports.labelImage = function labelImage(imagePath, options) {
 };
 
 /**
+ * Separates people from the background of an existing local image.
+ * The returned image is a temporary PNG with transparency.
+ *
+ * @param {string} imagePath Native path, file/content URI, or plugin image URI.
+ * @param {{maxDimension?: number, locale?: string}} [options] Optional settings.
+ * @returns {Promise<{status: string, imageUri: string, imagePath: string,
+ *          width: number, height: number, mimeType: string, bytes: number}>}
+ */
+exports.segmentSelfie = function segmentSelfie(imagePath, options) {
+    if (typeof imagePath !== 'string' || !imagePath.trim()) {
+        return Promise.reject({
+            code: 'INVALID_ARGUMENT',
+            message: 'imagePath must be a non-empty string.',
+            recoverable: false
+        });
+    }
+    options = options || {};
+    if (Object.prototype.hasOwnProperty.call(options, 'maxDimension')) {
+        var maxDimension = options.maxDimension;
+        if (typeof maxDimension !== 'number' || !isFinite(maxDimension)
+            || Math.floor(maxDimension) !== maxDimension
+            || maxDimension < 256 || maxDimension > 4096) {
+            return Promise.reject({
+                code: 'INVALID_ARGUMENT',
+                message: 'maxDimension must be an integer from 256 to 4096.',
+                recoverable: false
+            });
+        }
+    }
+    return call('segmentSelfie', [imagePath, options]);
+};
+
+/**
  * Detects every supported barcode in an existing local image.
  *
  * @param {string} imagePath Native path, file/content URI, or plugin image URI.

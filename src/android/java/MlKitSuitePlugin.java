@@ -61,6 +61,10 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             processImageLabels(args, callbackContext);
             return true;
         }
+        if ("segmentSelfie".equals(action)) {
+            processSelfieSegmentation(args, callbackContext);
+            return true;
+        }
         if ("prepareModels".equals(action)) {
             prepareModels(args, callbackContext);
             return true;
@@ -136,9 +140,12 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                 imageRequest ? IMAGE_WEB_PATH.length() : DOCUMENT_WEB_PATH.length()
             );
             boolean validImage = fileName.matches("face-[0-9a-fA-F-]+\\.jpg")
-                || fileName.matches("document-[0-9a-fA-F-]+-page-[0-9]+\\.jpg");
+                || fileName.matches("document-[0-9a-fA-F-]+-page-[0-9]+\\.jpg")
+                || fileName.matches("selfie-[0-9a-fA-F-]+\\.png");
             boolean validDocument = fileName.matches("document-[0-9a-fA-F-]+\\.pdf");
-            String mimeType = imageRequest ? "image/jpeg" : "application/pdf";
+            String mimeType = imageRequest
+                ? (fileName.endsWith(".png") ? "image/png" : "image/jpeg")
+                : "application/pdf";
             if ((imageRequest && !validImage) || (documentRequest && !validDocument)) {
                 return emptyResponse(mimeType);
             }
@@ -270,6 +277,7 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
         JSONObject barcode = new JSONObject();
         JSONObject document = new JSONObject();
         JSONObject imageLabeling = new JSONObject();
+        JSONObject selfieSegmentation = new JSONObject();
         JSONObject text = new JSONObject();
         JSONObject localization = new JSONObject();
         String faceMode = androidModuleMode(FACE_MODE_METADATA);
@@ -336,6 +344,13 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
             putInitialModelStatus(imageLabeling, imageLabelingMode);
             imageLabeling.put("defaultModel", true);
             imageLabeling.put("labels", "400+");
+            root.put("selfieSegmentation", selfieSegmentation);
+            selfieSegmentation.put("segment", true);
+            selfieSegmentation.put("mode", "bundled");
+            selfieSegmentation.put("bundled", true);
+            selfieSegmentation.put("ready", true);
+            selfieSegmentation.put("modelStatus", "bundled");
+            selfieSegmentation.put("output", "transparent-png");
             root.put("text", text);
             text.put("recognize", true);
             text.put("mode", ocrMode);
@@ -658,6 +673,57 @@ public final class MlKitSuitePlugin extends CordovaPlugin {
                     confidenceThreshold, localization, callbackContext
                 ));
             });
+        } catch (IllegalArgumentException exception) {
+            callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
+        }
+    }
+
+    private void processSelfieSegmentation(JSONArray args, CallbackContext callbackContext) {
+        String imagePath = args.optString(0, "").trim();
+        try {
+            JSONObject options = optionsAt(args, 1, "options");
+            MlKitLocalization localization = localization(options);
+            if (imagePath.isEmpty()) {
+                callbackContext.error(error("INVALID_ARGUMENT",
+                    "imagePath must be a non-empty string.", false));
+                return;
+            }
+            int maxDimension = options.optInt("maxDimension", 2048);
+            if (maxDimension < 256 || maxDimension > 4096) {
+                throw new IllegalArgumentException(
+                    "maxDimension must be an integer from 256 to 4096."
+                );
+            }
+            File cache = new File(cordova.getActivity().getCacheDir(), "mlkit-suite");
+            SelfieSegmentationProcessor.process(
+                cordova.getActivity().getApplicationContext(),
+                imagePath,
+                cache,
+                maxDimension,
+                cordova.getThreadPool(),
+                localization,
+                new SelfieSegmentationProcessor.Callback() {
+                    @Override
+                    public void onSuccess(SelfieSegmentationProcessor.Result result) {
+                        JSONObject payload = new JSONObject();
+                        try {
+                            payload.put("status", "success");
+                            payload.put("imageUri", imageWebBaseUrl() + result.file.getName());
+                            payload.put("imagePath", result.file.getAbsolutePath());
+                            payload.put("width", result.width);
+                            payload.put("height", result.height);
+                            payload.put("mimeType", "image/png");
+                            payload.put("bytes", result.file.length());
+                        } catch (Exception ignored) { }
+                        callbackContext.success(payload);
+                    }
+
+                    @Override
+                    public void onFailure(String code, String message, boolean recoverable) {
+                        callbackContext.error(error(code, message, recoverable));
+                    }
+                }
+            );
         } catch (IllegalArgumentException exception) {
             callbackContext.error(error("INVALID_ARGUMENT", exception.getMessage(), false));
         }
