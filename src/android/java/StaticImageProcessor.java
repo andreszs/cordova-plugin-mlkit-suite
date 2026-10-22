@@ -159,10 +159,9 @@ final class StaticImageProcessor {
         for (Barcode barcode : barcodes) {
             JSONObject value = new JSONObject();
             try {
-                String text = BarcodeTextDecoder.decode(
-                    barcode.getRawBytes(), barcode.getRawValue(), barcode.getDisplayValue()
-                );
-                value.put("text", text);
+                String text = barcode.getRawValue();
+                if (text == null) text = barcode.getDisplayValue();
+                value.put("text", text == null ? "" : text);
                 value.put("format", BarcodeScanConfig.nameForFormat(barcode.getFormat()));
                 value.put("valueType", barcode.getValueType());
                 Rect bounds = barcode.getBoundingBox();

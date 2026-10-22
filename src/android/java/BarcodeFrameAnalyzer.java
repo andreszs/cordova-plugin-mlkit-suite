@@ -77,10 +77,8 @@ final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseabl
         Barcode selected = null;
         boolean detectedOutsideGuide = false;
         for (Barcode barcode : barcodes) {
-            String text = BarcodeTextDecoder.decode(
-                barcode.getRawBytes(), barcode.getRawValue(), barcode.getDisplayValue()
-            );
-            if (!text.isEmpty()) {
+            String rawValue = barcode.getRawValue();
+            if (rawValue != null && !rawValue.isEmpty()) {
                 if (listener.isInsideGuide(barcode, imageWidth, imageHeight)) {
                     selected = barcode;
                     break;
@@ -95,9 +93,7 @@ final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseabl
             return;
         }
 
-        String text = BarcodeTextDecoder.decode(
-            selected.getRawBytes(), selected.getRawValue(), selected.getDisplayValue()
-        );
+        String text = selected.getRawValue();
         String format = BarcodeScanConfig.nameForFormat(selected.getFormat());
         int frames = tracker.observe(text, format);
         listener.onCandidate(text, format, frames, BarcodeScanConfig.CONFIRMATION_FRAMES);

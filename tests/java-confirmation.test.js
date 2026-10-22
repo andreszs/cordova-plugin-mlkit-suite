@@ -10,10 +10,8 @@ var root = path.resolve(__dirname, '..');
 var sources = [
     path.join(root, 'src', 'android', 'java', 'BarcodeConfirmationTracker.java'),
     path.join(root, 'src', 'android', 'java', 'BarcodeScanRegion.java'),
-    path.join(root, 'src', 'android', 'java', 'BarcodeTextDecoder.java'),
     path.join(root, 'tests', 'java', 'BarcodeConfirmationTrackerTest.java'),
-    path.join(root, 'tests', 'java', 'BarcodeScanRegionTest.java'),
-    path.join(root, 'tests', 'java', 'BarcodeTextDecoderTest.java')
+    path.join(root, 'tests', 'java', 'BarcodeScanRegionTest.java')
 ];
 var executable = process.platform === 'win32' ? '.exe' : '';
 var javaHomes = [
@@ -37,9 +35,6 @@ try {
     ], { stdio: 'inherit' });
     childProcess.execFileSync(java, [
         '-cp', output, 'com.andreszs.plugins.mlkitsuite.BarcodeScanRegionTest'
-    ], { stdio: 'inherit' });
-    childProcess.execFileSync(java, [
-        '-cp', output, 'com.andreszs.plugins.mlkitsuite.BarcodeTextDecoderTest'
     ], { stdio: 'inherit' });
 } finally {
     fs.rmSync(output, { recursive: true, force: true });
