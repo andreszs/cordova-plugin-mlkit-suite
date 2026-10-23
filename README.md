@@ -195,17 +195,19 @@ The Google Document Scanner UI is owned by Google Play services and follows the 
 
 | Method | Android | iOS | Purpose |
 | --- | --- | --- | --- |
-| `MlKit.getCapabilities()` | yes | yes | Describes modules available on the current platform and device. |
-| `MlKit.prepareModels(modules?, options?)` | yes | yes | Ensures all or selected Face, Barcode, Image Labeling, Latin OCR, and Subject Segmentation modules are ready; bundled modules resolve immediately. |
-| `MlKit.prepareDocumentScanner(options?)` | Android 7+ and 1.7 GB RAM | no | Checks and installs the on-demand Google Play services scanner component. |
-| `MlKit.scanDocument(options?)` | Android 7+ and 1.7 GB RAM | no | Opens Google's native document capture, crop, filter, and cleanup UI. |
-| `MlKit.labelImage(imagePath, options?)` | yes | yes | Returns labels from ML Kit's default image-labeling model. |
-| `MlKit.segmentSelfie(imagePath, options?)` | yes | yes | Creates a transparent PNG containing the people found in a local image. |
-| `MlKit.segmentSubjects(imagePath, options?)` | yes | no | Creates a transparent PNG containing foreground subjects from a local image. |
-| `MlKit.recognizeText(imagePath, options?)` | yes | yes | Returns plain Latin-script text from a local image. |
-| `MlKit.scanBarcodes(imagePath, options?)` | yes | yes | Returns every matching barcode detected in a local image. |
-| `MlKit.barcode.scan(options?)` | yes | yes | Opens a high-resolution rear-camera barcode scanner. |
-| `MlKit.face.capture(options?)` | yes | yes | Opens guided front-camera face capture with automatic capture. |
+| `MlKit.getCapabilities()` | ✅ | ✅ | Describes modules available on the current platform and device. |
+| `MlKit.prepareModels(modules?, options?)` | ✅ | ✅ | Ensures all or selected Face, Barcode, Image Labeling, Latin OCR, and Subject Segmentation modules are ready; bundled modules resolve immediately. |
+| `MlKit.prepareDocumentScanner(options?)` | ✅ | ❌ | Checks and installs the on-demand Google Play services scanner component. |
+| `MlKit.scanDocument(options?)` | ✅ | ❌ | Opens Google's native document capture, crop, filter, and cleanup UI. |
+| `MlKit.labelImage(imagePath, options?)` | ✅ | ✅ | Returns labels from ML Kit's default image-labeling model. |
+| `MlKit.segmentSelfie(imagePath, options?)` | ✅ | ✅ | Creates a transparent PNG containing the people found in a local image. |
+| `MlKit.segmentSubjects(imagePath, options?)` | ✅ | ❌ | Creates a transparent PNG containing foreground subjects from a local image. |
+| `MlKit.recognizeText(imagePath, options?)` | ✅ | ✅ | Returns plain Latin-script text from a local image. |
+| `MlKit.scanBarcodes(imagePath, options?)` | ✅ | ✅ | Returns every matching barcode detected in a local image. |
+| `MlKit.barcode.scan(options?)` | ✅ | ✅ | Opens a high-resolution rear-camera barcode scanner. |
+| `MlKit.face.capture(options?)` | ✅ | ✅ | Opens guided front-camera face capture with automatic capture. |
+
+Document Scanner requires at least 1.7 GB of total device RAM.
 
 All methods return Promises. The plugin processes content locally and does not interpret, validate, upload, or transform decoded payloads for a particular country or document type.
 
