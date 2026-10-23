@@ -143,16 +143,20 @@ cordova plugin add cordova-plugin-mlkit-suite \
 
 Module-specific variables override the global value; `inherit` uses the global setting:
 
-| Variable | Default | Scope |
+| Module | Installation variable | Valid values |
 | --- | --- | --- |
-| `ANDROID_MLKIT_MODEL_DELIVERY` | `install-time` | Global fallback |
-| `ANDROID_MLKIT_FACE_MODE` | `inherit` | Face Detection |
-| `ANDROID_MLKIT_BARCODE_MODE` | `inherit` | Barcode Scanning |
-| `ANDROID_MLKIT_OCR_MODE` | `inherit` | Latin Text Recognition |
-| `ANDROID_MLKIT_IMAGE_LABELING_MODE` | `inherit` | Image Labeling |
-| `ANDROID_MLKIT_SUBJECT_SEGMENTATION_MODE` | `inherit` | Subject Segmentation; `install-time` or `first-use` only |
+| Global fallback | `ANDROID_MLKIT_MODEL_DELIVERY` | `bundled`, `install-time`, `first-use`, `play-services` |
+| Face Detection | `ANDROID_MLKIT_FACE_MODE` | `inherit`, `bundled`, `install-time`, `first-use`, `play-services` |
+| Barcode Scanning | `ANDROID_MLKIT_BARCODE_MODE` | `inherit`, `bundled`, `install-time`, `first-use`, `play-services` |
+| Image Labeling | `ANDROID_MLKIT_IMAGE_LABELING_MODE` | `inherit`, `bundled`, `install-time`, `first-use`, `play-services` |
+| Latin Text Recognition | `ANDROID_MLKIT_OCR_MODE` | `inherit`, `bundled`, `install-time`, `first-use`, `play-services` |
+| Selfie Segmentation | None | `bundled` only |
+| Subject Segmentation | `ANDROID_MLKIT_SUBJECT_SEGMENTATION_MODE` | `inherit`, `install-time`, `first-use`, `play-services` |
+| Document Scanner | None | Google Play services only |
 
-Accepted values are `bundled`, `install-time`, and `first-use`; `play-services` aliases `install-time`. Subject Segmentation rejects `bundled`; when the global fallback is `bundled`, its inherited strategy remains `install-time`. These are build-time settings, so remove and re-add the plugin to change them. Do not edit generated Gradle, manifest, `plugins/`, or `platforms/android/` files.
+The global fallback defaults to `install-time`; module variables default to `inherit`. `play-services` aliases `install-time`. Subject Segmentation resolves inherited `bundled` to `install-time`.
+
+These are build-time settings, so remove and re-add the plugin to change them. Do not edit generated Gradle, manifest, `plugins/`, or `platforms/android/` files.
 
 When an unbundled module is missing, the plugin shows a native spinner, waits for the download, and then continues the requested operation. Its default text follows the resolved plugin locale; set `moduleLoadingMessage` to custom text, or to an empty string for a spinner without a label:
 
