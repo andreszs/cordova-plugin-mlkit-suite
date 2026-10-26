@@ -4,7 +4,7 @@
 
 # cordova-plugin-mlkit-suite
 
-Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for Cordova on Android and iOS. It provides guided face capture, live and still-image barcode scanning, image labeling, selfie and subject segmentation, Latin text recognition, and the native Android document scanner.
+`cordova-plugin-mlkit-suite` is a [Google ML Kit](https://developers.google.com/ml-kit) computer-vision plugin for Apache Cordova on Android and iOS. Its JavaScript API provides guided face capture, live and still-image barcode scanning, OCR with Text Recognition v2, document scanning, image labeling, selfie segmentation, subject segmentation, and background removal through native ML Kit SDKs.
 
 > [!WARNING]
 > This plugin is in active development. Its API, defaults, quality thresholds, and native behavior may change before a stable release. Validate every required workflow on representative physical devices before using it in production.

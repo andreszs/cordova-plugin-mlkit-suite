@@ -5,9 +5,12 @@
         id="cordova-plugin-mlkit-suite"
         version="0.2.1">
     <name>ML Kit Suite</name>
-    <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, selfie and subject segmentation, and guided face processing.</description>
+    <description>Google ML Kit vision suite for Apache Cordova on Android and iOS with barcode scanning, face capture, OCR, document scanning, image labeling, and segmentation.</description>
+    <author href="https://github.com/andreszs">Andres Zs</author>
     <license>MIT</license>
-    <keywords>cordova,android,ios,mlkit,ml-kit,document-scanner,text-recognition,ocr,face-detection,barcode-scanning,image-labeling,selfie-segmentation,subject-segmentation,background-removal,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+    <keywords>cordova,apache-cordova,cordova-plugin,android,ios,mlkit,ml-kit,google-ml-kit,computer-vision,mobile-vision,on-device-ml,document-scanner,document-scanning,text-recognition,optical-character-recognition,ocr,face-detection,face-capture,barcode-scanning,barcode-scanner,image-labeling,selfie-segmentation,subject-segmentation,image-segmentation,background-removal,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+    <repo>https://github.com/andreszs/cordova-plugin-mlkit-suite.git</repo>
+    <issue>https://github.com/andreszs/cordova-plugin-mlkit-suite/issues</issue>
 
     <engines>
         <engine name="cordova" version=">=11.0.0" />
