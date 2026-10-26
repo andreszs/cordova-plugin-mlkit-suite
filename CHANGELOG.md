@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-10-26
+
+- Added trusted npm publishing through GitHub Actions with verifiable provenance.
+- Improved package, Cordova, GitHub, and README metadata for project discovery.
+
 ## 0.2.1 - 2026-10-26
 
 - Added the optional `beepEnabled` Face Capture confirmation sound, enabled by default on Android and iOS.

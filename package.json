@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-mlkit-suite",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Google ML Kit vision suite for Apache Cordova on Android and iOS with barcode scanning, face capture, OCR, document scanning, image labeling, and segmentation.",
   "license": "MIT",
   "author": "Andres Zs",
@@ -70,6 +70,10 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "test": "node tests/js-api.test.js && node tests/java-confirmation.test.js && node tests/ios-live-barcode.test.js && node tests/ios-static-text.test.js && node tests/ios-image-labeling.test.js && node tests/ios-selfie-segmentation.test.js && node tests/ios-face-capture.test.js && node tests/localization.test.js"
   }
