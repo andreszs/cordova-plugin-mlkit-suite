@@ -3,7 +3,7 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:tools="http://schemas.android.com/tools"
         id="cordova-plugin-mlkit-suite"
-        version="0.2.0">
+        version="0.2.1">
     <name>ML Kit Suite</name>
     <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, selfie and subject segmentation, and guided face processing.</description>
     <license>MIT</license>
@@ -81,6 +81,7 @@
         <resource-file src="src/android/res/values/mlkit_suite_strings.xml" target="res/values/mlkit_suite_strings.xml" />
         <resource-file src="src/android/res/values-es/mlkit_suite_strings.xml" target="res/values-es/mlkit_suite_strings.xml" />
         <source-file src="src/android/java/MlKitLocalization.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/MlKitSuccessBeep.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/MlKitSuitePlugin.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
@@ -115,6 +116,7 @@
         </config-file>
 
         <source-file src="src/ios/FaceCaptureTypes.swift" />
+        <source-file src="src/ios/MlKitSuccessBeep.swift" />
         <source-file src="src/ios/MlKitLocalization.swift" />
         <source-file src="src/ios/FaceOverlayView.swift" />
         <source-file src="src/ios/FaceStillProcessor.swift" />

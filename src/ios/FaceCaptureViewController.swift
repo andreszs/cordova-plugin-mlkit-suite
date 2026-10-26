@@ -19,6 +19,7 @@ final class FaceCaptureViewController: UIViewController {
     private let processingQueue = DispatchQueue(label: "com.andreszs.mlkitsuite.processing", qos: .userInitiated)
     private let liveDetector: FaceDetector
     private let stillProcessor: FaceStillProcessor
+    private let successBeep = MlKitSuccessBeep()
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var overlayView: FaceOverlayView!
     private var videoOutput: AVCaptureVideoDataOutput?
@@ -351,7 +352,15 @@ final class FaceCaptureViewController: UIViewController {
         guard !completed else { return }
         completed = true
         timeoutItem?.cancel()
-        delegate?.faceCapture(self, didFinish: result)
+        if options.beepEnabled {
+            successBeep.play()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.faceCapture(self, didFinish: result)
+            }
+        } else {
+            delegate?.faceCapture(self, didFinish: result)
+        }
     }
 
     private func fail(_ error: MlKitSuiteError) {

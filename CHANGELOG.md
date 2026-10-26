@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-10-26
+
+- Added the optional `beepEnabled` Face Capture confirmation sound, enabled by default on Android and iOS.
+- Reused one synthesized native confirmation tone for Barcode Scanning and Face Capture.
+
 ## 0.2.0 - 2026-10-26
 
 - Added default-model Image Labeling on Android and iOS, including configurable Android model delivery.

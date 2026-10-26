@@ -41,6 +41,8 @@ import java.util.concurrent.Executors;
 public final class FaceCaptureActivity extends Activity
     implements LifecycleOwner, FaceFrameAnalyzer.Listener {
 
+    private static final long SUCCESS_BEEP_DELAY_MS = 250L;
+
     public static final String EXTRA_OPTIONS_JSON = "mlKitSuite.face.options";
     public static final String EXTRA_IMAGE_WEB_BASE_URL = "mlKitSuite.face.imageWebBaseUrl";
     public static final String EXTRA_RESULT_JSON = "mlKitSuite.face.result";
@@ -60,6 +62,7 @@ public final class FaceCaptureActivity extends Activity
     private ImageAnalysis imageAnalysis;
     private FaceFrameAnalyzer analyzer;
     private FaceStillProcessor stillProcessor;
+    private MlKitSuccessBeep successBeep;
     private String imageWebBaseUrl;
     private boolean capturing;
     private boolean completed;
@@ -78,6 +81,7 @@ public final class FaceCaptureActivity extends Activity
                 getIntent().getStringExtra(EXTRA_OPTIONS_JSON)));
             imageWebBaseUrl = getIntent().getStringExtra(EXTRA_IMAGE_WEB_BASE_URL);
             stillProcessor = new FaceStillProcessor(config);
+            successBeep = new MlKitSuccessBeep(this, mainHandler);
         } catch (Exception error) {
             finishWithError("INVALID_ARGUMENT", "Invalid face capture options.", false);
             return;
@@ -121,6 +125,7 @@ public final class FaceCaptureActivity extends Activity
         if (analyzer != null) analyzer.close();
         if (stillProcessor != null) stillProcessor.close();
         if (cameraProvider != null) cameraProvider.unbindAll();
+        if (successBeep != null) successBeep.close();
         analysisExecutor.shutdownNow();
         captureExecutor.shutdownNow();
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
@@ -291,8 +296,16 @@ public final class FaceCaptureActivity extends Activity
         } catch (Exception ignored) { }
         Intent intent = new Intent();
         intent.putExtra(EXTRA_RESULT_JSON, result.toString());
-        setResult(RESULT_OK, intent);
-        finish();
+        if (config.beepEnabled && successBeep != null) {
+            successBeep.play();
+            mainHandler.postDelayed(() -> {
+                setResult(RESULT_OK, intent);
+                finish();
+            }, SUCCESS_BEEP_DELAY_MS);
+        } else {
+            setResult(RESULT_OK, intent);
+            finish();
+        }
     }
 
     private void cancelByUser() {

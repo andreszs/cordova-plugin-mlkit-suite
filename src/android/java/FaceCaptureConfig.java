@@ -13,6 +13,7 @@ final class FaceCaptureConfig {
     final int jpegQuality;
     final boolean showCloseButton;
     final boolean debugMode;
+    final boolean beepEnabled;
     final String instructionText;
     final MlKitLocalization localization;
     final long timeoutMs;
@@ -24,6 +25,7 @@ final class FaceCaptureConfig {
         int jpegQuality,
         boolean showCloseButton,
         boolean debugMode,
+        boolean beepEnabled,
         String instructionText,
         MlKitLocalization localization,
         long timeoutMs,
@@ -34,6 +36,7 @@ final class FaceCaptureConfig {
         this.jpegQuality = jpegQuality;
         this.showCloseButton = showCloseButton;
         this.debugMode = debugMode;
+        this.beepEnabled = beepEnabled;
         this.instructionText = instructionText;
         this.localization = localization;
         this.timeoutMs = timeoutMs;
@@ -51,6 +54,7 @@ final class FaceCaptureConfig {
         int quality = strictInteger(options, "jpegQuality", 95, 50, 100);
         boolean close = strictBoolean(options, "showCloseButton", true);
         boolean debug = strictBoolean(options, "debugMode", false);
+        boolean beep = strictBoolean(options, "beepEnabled", true);
         String instruction = strictString(options, "instructionText",
             localization.text("face_instruction"));
         long timeout = strictLong(options, "timeoutMs", 0L, 0L, 600000L);
@@ -62,7 +66,7 @@ final class FaceCaptureConfig {
             }
             rawChecks = (JSONObject) value;
         }
-        return new FaceCaptureConfig(width, height, quality, close, debug, instruction,
+        return new FaceCaptureConfig(width, height, quality, close, debug, beep, instruction,
             localization, timeout, Checks.fromJson(rawChecks));
     }
 
@@ -72,7 +76,8 @@ final class FaceCaptureConfig {
             String key = keys.next();
             if (!("outputWidth".equals(key) || "outputHeight".equals(key)
                 || "jpegQuality".equals(key) || "showCloseButton".equals(key)
-                || "debugMode".equals(key) || "instructionText".equals(key)
+                || "debugMode".equals(key) || "beepEnabled".equals(key)
+                || "instructionText".equals(key)
                 || "timeoutMs".equals(key) || "checks".equals(key)
                 || "moduleLoadingMessage".equals(key) || "locale".equals(key))) {
                 throw new IllegalArgumentException("Unknown face capture option: " + key + ".");

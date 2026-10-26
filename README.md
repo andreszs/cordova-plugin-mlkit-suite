@@ -429,6 +429,7 @@ All checks are enabled by default. Capture starts automatically only after they 
 | `jpegQuality` | integer `50–100` | `95` | JPEG encoding quality. |
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. |
 | `debugMode` | `boolean` | `false` | Shows face bounds and live quality values without weakening validation. |
+| `beepEnabled` | `boolean` | `true` | Plays a short synthesized confirmation beep after a successful capture. Device silent mode is respected. |
 | `instructionText` | `string \| null` | `"Place your face inside the oval"` | Text shown above the guide. An empty string hides it. |
 | `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading Face Detection. Empty string shows only the spinner. |
 | `locale` | `string` | `"auto"` | Plugin UI/error locale (`en`, `es`, or BCP-47). |

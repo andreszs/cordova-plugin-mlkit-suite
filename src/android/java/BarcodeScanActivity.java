@@ -5,10 +5,6 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.media.AudioAttributes;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioTrack;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -66,7 +62,7 @@ public final class BarcodeScanActivity extends Activity
     private ImageAnalysis imageAnalysis;
     private BarcodeFrameAnalyzer analyzer;
     private Camera camera;
-    private AudioTrack successBeep;
+    private MlKitSuccessBeep successBeep;
     private boolean torchEnabled;
     private boolean completed;
     private Runnable timeoutRunnable;
@@ -82,6 +78,7 @@ public final class BarcodeScanActivity extends Activity
         try {
             config = BarcodeScanConfig.fromJson(this, new JSONObject(
                 getIntent().getStringExtra(EXTRA_OPTIONS_JSON)));
+            successBeep = new MlKitSuccessBeep(this, mainHandler);
         } catch (Exception error) {
             finishWithError("INVALID_ARGUMENT", "Invalid barcode scan options.", false);
             return;
@@ -124,7 +121,7 @@ public final class BarcodeScanActivity extends Activity
         if (imageAnalysis != null) imageAnalysis.clearAnalyzer();
         if (analyzer != null) analyzer.close();
         if (cameraProvider != null) cameraProvider.unbindAll();
-        releaseSuccessBeep();
+        if (successBeep != null) successBeep.close();
         analysisExecutor.shutdownNow();
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
         super.onDestroy();
@@ -330,59 +327,7 @@ public final class BarcodeScanActivity extends Activity
     }
 
     private void playSuccessBeep() {
-        if (!config.beepEnabled) return;
-        AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        if (audioManager != null && audioManager.getRingerMode() != AudioManager.RINGER_MODE_NORMAL) {
-            return;
-        }
-        final int sampleRate = 22050;
-        final int sampleCount = sampleRate / 10;
-        byte[] pcm = new byte[sampleCount * 2];
-        for (int index = 0; index < sampleCount; index++) {
-            double time = index / (double) sampleRate;
-            double remaining = (sampleCount - index) / (double) sampleRate;
-            double envelope = Math.min(1d, time / 0.005d) * Math.min(1d, remaining / 0.025d);
-            short sample = (short) Math.round(Math.sin(2d * Math.PI * 1800d * time)
-                * envelope * Short.MAX_VALUE * 0.55d);
-            pcm[index * 2] = (byte) (sample & 0xff);
-            pcm[index * 2 + 1] = (byte) ((sample >>> 8) & 0xff);
-        }
-        try {
-            AudioTrack track = new AudioTrack.Builder()
-                .setAudioAttributes(new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build())
-                .setAudioFormat(new AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build())
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .setBufferSizeInBytes(pcm.length)
-                .build();
-            if (track.write(pcm, 0, pcm.length) <= 0) {
-                track.release();
-                return;
-            }
-            releaseSuccessBeep();
-            successBeep = track;
-            track.play();
-            mainHandler.postDelayed(() -> {
-                if (successBeep == track) releaseSuccessBeep();
-            }, 250L);
-        } catch (Exception ignored) {
-            releaseSuccessBeep();
-        }
-    }
-
-    private void releaseSuccessBeep() {
-        if (successBeep == null) return;
-        try {
-            successBeep.stop();
-        } catch (Exception ignored) { }
-        successBeep.release();
-        successBeep = null;
+        if (config.beepEnabled && successBeep != null) successBeep.play();
     }
 
     private FrameLayout.LayoutParams matchParent() {

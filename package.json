@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-mlkit-suite",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Extensible Google ML Kit suite for Cordova document, text, barcode, image labeling, selfie and subject segmentation, and guided face processing.",
   "license": "MIT",
   "author": "Andres Zs",

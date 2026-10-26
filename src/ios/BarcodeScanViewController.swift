@@ -24,7 +24,7 @@ final class BarcodeScanViewController: UIViewController {
     private var overlayView: BarcodeOverlayView!
     private var closeButton: UIButton?
     private var torchButton: UIButton?
-    private var successBeepPlayer: AVAudioPlayer?
+    private let successBeep = MlKitSuccessBeep()
     private var camera: AVCaptureDevice?
     private var processingFrame = false
     private var analysisFinished = false
@@ -372,7 +372,7 @@ final class BarcodeScanViewController: UIViewController {
             imageSize: imageSize,
             message: options.localization.text("barcode_success")
         )
-        playSuccessBeep()
+        if options.beepEnabled { successBeep.play() }
         sessionQueue.async { [session] in
             if session.isRunning { session.stopRunning() }
         }
@@ -391,73 +391,6 @@ final class BarcodeScanViewController: UIViewController {
         return UIImage(cgImage: cgImage, scale: 1, orientation: .right)
     }
 
-    private func playSuccessBeep() {
-        guard options.beepEnabled else { return }
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
-            try session.setActive(true)
-            let player = try AVAudioPlayer(data: Self.successBeepData)
-            player.volume = 1
-            player.prepareToPlay()
-            successBeepPlayer = player
-            player.play()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                guard let self = self, self.successBeepPlayer === player else { return }
-                player.stop()
-                self.successBeepPlayer = nil
-                try? session.setActive(false, options: [.notifyOthersOnDeactivation])
-            }
-        } catch {
-            successBeepPlayer = nil
-        }
-    }
-
-    private static let successBeepData: Data = {
-        let sampleRate: UInt32 = 22_050
-        let sampleCount = Int(sampleRate / 10)
-        let dataSize = UInt32(sampleCount * 2)
-        var data = Data()
-
-        func appendASCII(_ value: String) {
-            data.append(contentsOf: value.utf8)
-        }
-        func appendUInt16(_ value: UInt16) {
-            var littleEndian = value.littleEndian
-            Swift.withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
-        }
-        func appendUInt32(_ value: UInt32) {
-            var littleEndian = value.littleEndian
-            Swift.withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
-        }
-        func appendInt16(_ value: Int16) {
-            appendUInt16(UInt16(bitPattern: value))
-        }
-
-        appendASCII("RIFF")
-        appendUInt32(36 + dataSize)
-        appendASCII("WAVE")
-        appendASCII("fmt ")
-        appendUInt32(16)
-        appendUInt16(1)
-        appendUInt16(1)
-        appendUInt32(sampleRate)
-        appendUInt32(sampleRate * 2)
-        appendUInt16(2)
-        appendUInt16(16)
-        appendASCII("data")
-        appendUInt32(dataSize)
-
-        for index in 0..<sampleCount {
-            let time = Double(index) / Double(sampleRate)
-            let remaining = Double(sampleCount - index) / Double(sampleRate)
-            let envelope = min(1, time / 0.005) * min(1, remaining / 0.025)
-            let value = sin(2 * Double.pi * 1_800 * time)
-                * envelope * Double(Int16.max) * 0.55
-            appendInt16(Int16(value.rounded()))
-        }
-        return data
-    }()
 
     private func fail(_ error: MlKitSuiteError) {
         guard !completed else { return }

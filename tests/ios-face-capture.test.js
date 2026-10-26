@@ -6,6 +6,7 @@ var path = require('path');
 
 var root = path.resolve(__dirname, '..');
 var controller = fs.readFileSync(path.join(root, 'src/ios/FaceCaptureViewController.swift'), 'utf8');
+var types = fs.readFileSync(path.join(root, 'src/ios/FaceCaptureTypes.swift'), 'utf8');
 var overlay = fs.readFileSync(path.join(root, 'src/ios/FaceOverlayView.swift'), 'utf8');
 
 assert(controller.includes('checks: options.checks'));
@@ -13,6 +14,9 @@ assert(controller.includes('bufferHeight >= bufferWidth ? .up : .leftMirrored'))
 assert(controller.includes('previewLayer.connection, mirrored: true'));
 assert(controller.includes('beginCapture(analysis, pixelBuffer: pixelBuffer)'));
 assert(controller.includes('pixelBuffer: pixelBuffer'));
+assert(types.includes('beepEnabled = try boolean("beepEnabled", fallback: true)'));
+assert(controller.includes('if options.beepEnabled'));
+assert(controller.includes('successBeep.play()'));
 assert(!controller.includes('AVCapturePhotoOutput'));
 assert(!controller.includes('AVCapturePhotoCaptureDelegate'));
 assert(!controller.includes('fileDataRepresentation'));

@@ -88,6 +88,7 @@ struct FaceCaptureOptions {
     let jpegQuality: Int
     let showCloseButton: Bool
     let debugMode: Bool
+    let beepEnabled: Bool
     let instructionText: String
     let localization: MlKitLocalization
     let timeoutMs: Int
@@ -97,7 +98,7 @@ struct FaceCaptureOptions {
         localization = try MlKitLocalization(dictionary: dictionary)
         let known = Set([
             "outputWidth", "outputHeight", "jpegQuality", "showCloseButton",
-            "debugMode", "instructionText", "timeoutMs", "checks",
+            "debugMode", "beepEnabled", "instructionText", "timeoutMs", "checks",
             "moduleLoadingMessage", "locale"
         ])
         for key in dictionary.keys where !known.contains(key) {
@@ -133,6 +134,7 @@ struct FaceCaptureOptions {
         jpegQuality = try integer("jpegQuality", fallback: 95, minimum: 50, maximum: 100)
         showCloseButton = try boolean("showCloseButton", fallback: true)
         debugMode = try boolean("debugMode", fallback: false)
+        beepEnabled = try boolean("beepEnabled", fallback: true)
         timeoutMs = try integer("timeoutMs", fallback: 0, minimum: 0, maximum: 600_000)
         if let raw = dictionary["instructionText"], !(raw is NSNull) {
             guard let string = raw as? String else {

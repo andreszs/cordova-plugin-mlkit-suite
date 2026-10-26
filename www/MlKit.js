@@ -270,7 +270,7 @@ exports.face = {
      * Opens the native front-camera guide and automatically captures a JPEG.
      *
      * @param {{outputWidth?: number, outputHeight?: number, jpegQuality?: number,
-     *          showCloseButton?: boolean, debugMode?: boolean,
+     *          showCloseButton?: boolean, debugMode?: boolean, beepEnabled?: boolean,
      *          instructionText?: string|null, timeoutMs?: number,
      *          moduleLoadingMessage?: string|null, locale?: string,
      *          checks?: {singleFace?: boolean, faceSize?: boolean,

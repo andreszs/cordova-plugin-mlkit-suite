@@ -10,6 +10,7 @@ var plugin = fs.readFileSync(path.join(root, 'src/ios/MlKitSuitePlugin.swift'), 
 var controller = fs.readFileSync(path.join(root, 'src/ios/BarcodeScanViewController.swift'), 'utf8');
 var faceController = fs.readFileSync(path.join(root, 'src/ios/FaceCaptureViewController.swift'), 'utf8');
 var types = fs.readFileSync(path.join(root, 'src/ios/BarcodeScanTypes.swift'), 'utf8');
+var successBeep = fs.readFileSync(path.join(root, 'src/ios/MlKitSuccessBeep.swift'), 'utf8');
 var spanish = fs.readFileSync(path.join(
     root, 'src/ios/MlKitSuiteResources.bundle/es.lproj/Localizable.strings'
 ), 'utf8');
@@ -18,6 +19,7 @@ var spanish = fs.readFileSync(path.join(
     'src/ios/BarcodeScanTypes.swift',
     'src/ios/BarcodeOverlayView.swift',
     'src/ios/BarcodeScanViewController.swift',
+    'src/ios/MlKitSuccessBeep.swift',
     'src/ios/MlKitLocalization.swift'
 ].forEach(function (source) {
     assert(pluginXml.includes('<source-file src="' + source + '" />'), source + ' must be packaged.');
@@ -47,7 +49,9 @@ assert(controller.includes('options.localization.text("barcode_center")'));
 assert(controller.includes('overlayView.contains('));
 assert(types.includes('guideColor must be a color in #RRGGBB format.'));
 assert(types.includes('beepEnabled = try boolean("beepEnabled", fallback: true)'));
-assert(controller.includes('AVAudioPlayer(data: Self.successBeepData)'));
+assert(controller.includes('private let successBeep = MlKitSuccessBeep()'));
+assert(controller.includes('if options.beepEnabled { successBeep.play() }'));
+assert(successBeep.includes('AVAudioPlayer(data: Self.data)'));
 assert(controller.includes('setTorchModeOn'));
 assert(controller.includes('UIImage(systemName: systemName'));
 assert(controller.includes('accessibilityLabel'));
