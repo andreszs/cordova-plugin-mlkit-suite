@@ -3,7 +3,7 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:tools="http://schemas.android.com/tools"
         id="cordova-plugin-mlkit-suite"
-        version="0.1.0">
+        version="0.2.0">
     <name>ML Kit Suite</name>
     <description>Extensible Google ML Kit suite for document, text, barcode, image labeling, selfie and subject segmentation, and guided face processing.</description>
     <license>MIT</license>

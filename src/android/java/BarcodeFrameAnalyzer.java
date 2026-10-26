@@ -1,5 +1,6 @@
 package com.andreszs.plugins.mlkitsuite;
 
+import android.graphics.Rect;
 import android.media.Image;
 
 import androidx.annotation.NonNull;
@@ -22,7 +23,8 @@ final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseabl
         void onOutsideGuide();
         boolean isInsideGuide(Barcode barcode, int imageWidth, int imageHeight);
         void onCandidate(String text, String format, int confirmedFrames, int requiredFrames);
-        void onConfirmed(String text, String format);
+        void onConfirmed(String text, String format, Rect bounds,
+                         int imageWidth, int imageHeight);
         void onAnalyzerError(Exception error);
     }
 
@@ -99,7 +101,9 @@ final class BarcodeFrameAnalyzer implements ImageAnalysis.Analyzer, AutoCloseabl
         listener.onCandidate(text, format, frames, BarcodeScanConfig.CONFIRMATION_FRAMES);
         if (tracker.isConfirmed()) {
             completed = true;
-            listener.onConfirmed(text, format);
+            Rect bounds = selected.getBoundingBox();
+            listener.onConfirmed(text, format, bounds == null ? null : new Rect(bounds),
+                imageWidth, imageHeight);
         }
     }
 

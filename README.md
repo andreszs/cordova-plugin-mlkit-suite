@@ -25,7 +25,7 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 ## Overview
 
 - **Guided face capture** on Android and iOS, with a front-camera overlay, configurable quality checks, automatic capture, and a local JPEG result.
-- **Barcode scanning** from the live camera or an existing image on Android and iOS, supporting all available barcode formats, configurable format filters, scan-region enforcement, and consecutive-frame confirmation.
+- **Barcode scanning** from the live camera or an existing image on Android and iOS, supporting all available barcode formats, configurable format filters, scan-region enforcement, consecutive-frame confirmation, animated success feedback, and an optional confirmation beep.
 - **Text recognition v2** for extracting Latin-script text from local images on Android and iOS.
 - **Document scanning** on Android, with page limits, scanner modes, gallery import, JPEG pages, and optional PDF output.
 - **Image labeling** for classifying local images with ML Kit's general-purpose default model on Android and iOS.
@@ -381,7 +381,7 @@ if (result.status === "success") {
 { "status": "success", "text": "https://example.com", "format": "QR_CODE" }
 ```
 
-Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. The four-color corner guide is the active scan region: codes outside it or crossing its edges are ignored. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format while fully inside the guide. A missing, outside, or different value resets confirmation.
+Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. The four-color corner guide is the active scan region: codes outside it or crossing its edges are ignored. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format while fully inside the guide. A missing, outside, or different value resets confirmation. On success, the scanner freezes the confirmed camera frame and animates the guide onto the detected code before returning the result.
 
 #### Barcode formats
 
@@ -394,6 +394,7 @@ Both barcode methods support `AZTEC`, `CODABAR`, `CODE_39`, `CODE_93`, `CODE_128
 | `formats` | `string[] \| string \| null` | all formats | Formats to detect. Restricting formats generally improves speed. |
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. Android Back still cancels when hidden. |
 | `showTorchButton` | `boolean` | `true` | Shows a torch toggle when the rear camera has flash hardware. |
+| `beepEnabled` | `boolean` | `true` | Plays a short synthesized confirmation beep after a successful scan. Device silent mode is respected. |
 | `instructionText` | `string \| null` | `"Place a barcode inside the frame"` | Text shown above the guide. An empty string hides it. |
 | `guideColor` | `string \| null` | `null` | Optional `#RRGGBB` color for all four guide corners. When omitted, the default blue, yellow, green, and red corners are used. A detected in-guide barcode always changes them to green. |
 | `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading Barcode Scanning. Empty string shows only the spinner. |

@@ -5,6 +5,12 @@ final class BarcodeOverlayView: UIView {
     private let guideColor: UIColor?
     private var message: String
     private var candidateVisible = false
+    private var successVisible = false
+    private var displayedGuide: CGRect?
+    private var animationStart = CGRect.zero
+    private var animationTarget = CGRect.zero
+    private var animationStartedAt: CFTimeInterval = 0
+    private var displayLink: CADisplayLink?
 
     init(instruction: String, guideColor: UIColor?, initialMessage: String) {
         self.instruction = instruction
@@ -27,23 +33,60 @@ final class BarcodeOverlayView: UIView {
     }
 
     func contains(barcodeFrame: CGRect, imageSize: CGSize) -> Bool {
+        guard let mapped = mappedFrame(barcodeFrame, imageSize: imageSize) else { return false }
+        return guideRect(in: bounds).contains(mapped)
+    }
+
+    func showSuccess(barcodeFrame: CGRect, imageSize: CGSize, message: String) {
+        let initial = guideRect(in: bounds)
+        let mapped = mappedFrame(barcodeFrame, imageSize: imageSize) ?? initial
+        let padded = mapped.insetBy(dx: -10, dy: -10).intersection(bounds)
+        animationStart = initial
+        animationTarget = padded.isNull || padded.isEmpty ? initial : padded
+        displayedGuide = initial
+        self.message = message
+        candidateVisible = true
+        successVisible = true
+        displayLink?.invalidate()
+        animationStartedAt = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(advanceSuccessAnimation(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+        setNeedsDisplay()
+    }
+
+    private func mappedFrame(_ barcodeFrame: CGRect, imageSize: CGSize) -> CGRect? {
         guard imageSize.width > 0, imageSize.height > 0, !barcodeFrame.isNull,
-              !barcodeFrame.isEmpty else { return false }
-        let guide = guideRect(in: bounds)
+              !barcodeFrame.isEmpty else { return nil }
         let scale = max(bounds.width / imageSize.width, bounds.height / imageSize.height)
         let offsetX = (bounds.width - imageSize.width * scale) / 2
         let offsetY = (bounds.height - imageSize.height * scale) / 2
-        let mapped = CGRect(
+        return CGRect(
             x: barcodeFrame.minX * scale + offsetX,
             y: barcodeFrame.minY * scale + offsetY,
             width: barcodeFrame.width * scale,
             height: barcodeFrame.height * scale
         )
-        return guide.contains(mapped)
+    }
+
+    @objc private func advanceSuccessAnimation(_ link: CADisplayLink) {
+        let progress = min(1, max(0, (CACurrentMediaTime() - animationStartedAt) / 0.22))
+        let eased = 1 - pow(1 - CGFloat(progress), 3)
+        displayedGuide = CGRect(
+            x: interpolate(animationStart.minX, animationTarget.minX, eased),
+            y: interpolate(animationStart.minY, animationTarget.minY, eased),
+            width: interpolate(animationStart.width, animationTarget.width, eased),
+            height: interpolate(animationStart.height, animationTarget.height, eased)
+        )
+        setNeedsDisplay()
+        if progress >= 1 {
+            link.invalidate()
+            displayLink = nil
+        }
     }
 
     override func draw(_ rect: CGRect) {
-        let guide = guideRect(in: rect)
+        let guide = successVisible ? (displayedGuide ?? guideRect(in: rect)) : guideRect(in: rect)
 
         let shade = UIBezierPath(rect: rect)
         shade.append(UIBezierPath(roundedRect: guide, cornerRadius: 18))
@@ -67,7 +110,7 @@ final class BarcodeOverlayView: UIView {
             ])
         }
 
-        if !instruction.isEmpty {
+        if !successVisible && !instruction.isEmpty {
             drawCentered(
                 instruction,
                 in: CGRect(x: 20, y: max(42, guide.minY - 64), width: rect.width - 40, height: 48),
@@ -138,5 +181,13 @@ final class BarcodeOverlayView: UIView {
                 .paragraphStyle: paragraph
             ]
         )
+    }
+
+    private func interpolate(_ start: CGFloat, _ end: CGFloat, _ progress: CGFloat) -> CGFloat {
+        start + (end - start) * progress
+    }
+
+    deinit {
+        displayLink?.invalidate()
     }
 }

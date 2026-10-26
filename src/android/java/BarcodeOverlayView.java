@@ -1,5 +1,6 @@
 package com.andreszs.plugins.mlkitsuite;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -9,14 +10,20 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 
 final class BarcodeOverlayView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF guide = new RectF();
+    private final RectF animatedGuide = new RectF();
+    private final RectF animationStart = new RectF();
+    private final RectF animationTarget = new RectF();
     private final String instruction;
     private final Integer guideColor;
     private String message;
     private boolean candidateVisible;
+    private boolean successVisible;
+    private ValueAnimator successAnimator;
 
     BarcodeOverlayView(Context context, String instruction, Integer guideColor,
                        String initialMessage) {
@@ -49,35 +56,76 @@ final class BarcodeOverlayView extends View {
         );
     }
 
+    void showSuccess(Rect bounds, int imageWidth, int imageHeight, String text) {
+        updateGuide(getWidth(), getHeight());
+        float[] mapped = bounds == null ? null : BarcodeScanRegion.map(
+            getWidth(), getHeight(), imageWidth, imageHeight,
+            bounds.left, bounds.top, bounds.right, bounds.bottom
+        );
+        animationStart.set(guide);
+        if (mapped == null) {
+            animationTarget.set(guide);
+        } else {
+            float padding = dp(10);
+            animationTarget.set(
+                Math.max(0, mapped[0] - padding),
+                Math.max(0, mapped[1] - padding),
+                Math.min(getWidth(), mapped[2] + padding),
+                Math.min(getHeight(), mapped[3] + padding)
+            );
+        }
+        animatedGuide.set(animationStart);
+        message = text;
+        candidateVisible = true;
+        successVisible = true;
+        if (successAnimator != null) successAnimator.cancel();
+        successAnimator = ValueAnimator.ofFloat(0f, 1f);
+        successAnimator.setDuration(220L);
+        successAnimator.setInterpolator(new DecelerateInterpolator());
+        successAnimator.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            animatedGuide.set(
+                lerp(animationStart.left, animationTarget.left, progress),
+                lerp(animationStart.top, animationTarget.top, progress),
+                lerp(animationStart.right, animationTarget.right, progress),
+                lerp(animationStart.bottom, animationTarget.bottom, progress)
+            );
+            invalidate();
+        });
+        successAnimator.start();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float width = getWidth();
         float height = getHeight();
         updateGuide(width, height);
+        RectF frame = successVisible ? animatedGuide : guide;
 
         Path shade = new Path();
         shade.setFillType(Path.FillType.EVEN_ODD);
         shade.addRect(0, 0, width, height, Path.Direction.CW);
-        shade.addRoundRect(guide, dp(18), dp(18), Path.Direction.CCW);
+        shade.addRoundRect(frame, dp(18), dp(18), Path.Direction.CCW);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0x99000000);
         canvas.drawPath(shade, paint);
 
         int color = candidateVisible ? 0xff4ade80 : Color.WHITE;
         if (candidateVisible) {
-            drawCornerFrame(canvas, color, color, color, color);
+            drawCornerFrame(canvas, frame, color, color, color, color);
         } else if (guideColor != null) {
-            drawCornerFrame(canvas, guideColor, guideColor, guideColor, guideColor);
+            drawCornerFrame(canvas, frame, guideColor, guideColor, guideColor, guideColor);
         } else {
-            drawCornerFrame(canvas, 0xff4285f4, 0xfffbbc04, 0xff34a853, 0xffea4335);
+            drawCornerFrame(canvas, frame, 0xff4285f4, 0xfffbbc04, 0xff34a853,
+                0xffea4335);
         }
 
-        if (!instruction.isEmpty()) {
+        if (!successVisible && !instruction.isEmpty()) {
             drawCenteredText(canvas, instruction, Math.max(dp(72), guide.top - dp(42)),
                 dp(17), Color.WHITE);
         }
-        drawCenteredText(canvas, message, Math.min(height - dp(72), guide.bottom + dp(54)),
+        drawCenteredText(canvas, message, Math.min(height - dp(72), frame.bottom + dp(54)),
             dp(17), color);
     }
 
@@ -88,44 +136,44 @@ final class BarcodeOverlayView extends View {
             width / 2f + guideSize / 2f, centerY + guideSize / 2f);
     }
 
-    private void drawCornerFrame(Canvas canvas, int topLeft, int topRight,
+    private void drawCornerFrame(Canvas canvas, RectF frame, int topLeft, int topRight,
                                  int bottomLeft, int bottomRight) {
-        float radius = dp(22);
-        float leg = Math.min(guide.width() * 0.22f, dp(76));
+        float radius = Math.min(dp(22), Math.min(frame.width(), frame.height()) * 0.25f);
+        float leg = Math.min(Math.min(frame.width(), frame.height()) * 0.32f, dp(76));
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(4));
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeJoin(Paint.Join.ROUND);
 
         Path path = new Path();
-        path.moveTo(guide.left, guide.top + leg);
-        path.lineTo(guide.left, guide.top + radius);
-        path.quadTo(guide.left, guide.top, guide.left + radius, guide.top);
-        path.lineTo(guide.left + leg, guide.top);
+        path.moveTo(frame.left, frame.top + leg);
+        path.lineTo(frame.left, frame.top + radius);
+        path.quadTo(frame.left, frame.top, frame.left + radius, frame.top);
+        path.lineTo(frame.left + leg, frame.top);
         paint.setColor(topLeft);
         canvas.drawPath(path, paint);
 
         path.reset();
-        path.moveTo(guide.right - leg, guide.top);
-        path.lineTo(guide.right - radius, guide.top);
-        path.quadTo(guide.right, guide.top, guide.right, guide.top + radius);
-        path.lineTo(guide.right, guide.top + leg);
+        path.moveTo(frame.right - leg, frame.top);
+        path.lineTo(frame.right - radius, frame.top);
+        path.quadTo(frame.right, frame.top, frame.right, frame.top + radius);
+        path.lineTo(frame.right, frame.top + leg);
         paint.setColor(topRight);
         canvas.drawPath(path, paint);
 
         path.reset();
-        path.moveTo(guide.left, guide.bottom - leg);
-        path.lineTo(guide.left, guide.bottom - radius);
-        path.quadTo(guide.left, guide.bottom, guide.left + radius, guide.bottom);
-        path.lineTo(guide.left + leg, guide.bottom);
+        path.moveTo(frame.left, frame.bottom - leg);
+        path.lineTo(frame.left, frame.bottom - radius);
+        path.quadTo(frame.left, frame.bottom, frame.left + radius, frame.bottom);
+        path.lineTo(frame.left + leg, frame.bottom);
         paint.setColor(bottomLeft);
         canvas.drawPath(path, paint);
 
         path.reset();
-        path.moveTo(guide.right - leg, guide.bottom);
-        path.lineTo(guide.right - radius, guide.bottom);
-        path.quadTo(guide.right, guide.bottom, guide.right, guide.bottom - radius);
-        path.lineTo(guide.right, guide.bottom - leg);
+        path.moveTo(frame.right - leg, frame.bottom);
+        path.lineTo(frame.right - radius, frame.bottom);
+        path.quadTo(frame.right, frame.bottom, frame.right, frame.bottom - radius);
+        path.lineTo(frame.right, frame.bottom - leg);
         paint.setColor(bottomRight);
         canvas.drawPath(path, paint);
         paint.setStrokeCap(Paint.Cap.BUTT);
@@ -146,5 +194,15 @@ final class BarcodeOverlayView extends View {
 
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
+    }
+
+    private float lerp(float start, float end, float progress) {
+        return start + (end - start) * progress;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (successAnimator != null) successAnimator.cancel();
+        super.onDetachedFromWindow();
     }
 }

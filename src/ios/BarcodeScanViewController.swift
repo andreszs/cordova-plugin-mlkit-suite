@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import MLKitBarcodeScanning
 import MLKitVision
 import UIKit
@@ -12,14 +13,18 @@ final class BarcodeScanViewController: UIViewController {
     weak var delegate: BarcodeScanViewControllerDelegate?
 
     private static let requiredConfirmationFrames = 2
+    private static let successFeedbackDuration: TimeInterval = 0.45
     private let options: BarcodeScanOptions
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "cordova.mlkit.barcode.session")
     private let analysisQueue = DispatchQueue(label: "cordova.mlkit.barcode.analysis")
     private let scanner: BarcodeScanner
+    private let imageContext = CIContext()
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var overlayView: BarcodeOverlayView!
+    private var closeButton: UIButton?
     private var torchButton: UIButton?
+    private var successBeepPlayer: AVAudioPlayer?
     private var camera: AVCaptureDevice?
     private var processingFrame = false
     private var analysisFinished = false
@@ -107,6 +112,7 @@ final class BarcodeScanViewController: UIViewController {
             button.widthAnchor.constraint(equalToConstant: 44),
             button.heightAnchor.constraint(equalToConstant: 44)
         ])
+        closeButton = button
     }
 
     private func addTorchButton() {
@@ -257,7 +263,8 @@ final class BarcodeScanViewController: UIViewController {
         }
     }
 
-    private func handle(_ barcodes: [Barcode], imageSize: CGSize) {
+    private func handle(_ barcodes: [Barcode], imageSize: CGSize,
+                        sampleBuffer: CMSampleBuffer) {
         guard !analysisFinished else { return }
         let decoded = barcodes.filter {
             guard let text = $0.rawValue ?? $0.displayValue else { return false }
@@ -299,8 +306,14 @@ final class BarcodeScanViewController: UIViewController {
         )
         if consecutiveFrames >= Self.requiredConfirmationFrames {
             analysisFinished = true
+            let frozenImage = makeFrozenImage(from: sampleBuffer)
             DispatchQueue.main.async { [weak self] in
-                self?.finish(BarcodeScanResult(text: text, format: format))
+                self?.finish(
+                    BarcodeScanResult(text: text, format: format),
+                    barcodeFrame: barcode.frame,
+                    imageSize: imageSize,
+                    frozenImage: frozenImage
+                )
             }
         }
     }
@@ -339,12 +352,112 @@ final class BarcodeScanViewController: UIViewController {
         delegate?.barcodeScanDidCancel(self)
     }
 
-    private func finish(_ result: BarcodeScanResult) {
+    private func finish(_ result: BarcodeScanResult, barcodeFrame: CGRect,
+                        imageSize: CGSize, frozenImage: UIImage?) {
         guard !completed else { return }
         completed = true
         timeoutItem?.cancel()
-        delegate?.barcodeScan(self, didFinish: result)
+        if let frozenImage = frozenImage {
+            let frozenView = UIImageView(frame: view.bounds)
+            frozenView.image = frozenImage
+            frozenView.contentMode = .scaleAspectFill
+            frozenView.clipsToBounds = true
+            frozenView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.insertSubview(frozenView, belowSubview: overlayView)
+        }
+        closeButton?.isHidden = true
+        torchButton?.isHidden = true
+        overlayView.showSuccess(
+            barcodeFrame: barcodeFrame,
+            imageSize: imageSize,
+            message: options.localization.text("barcode_success")
+        )
+        playSuccessBeep()
+        sessionQueue.async { [session] in
+            if session.isRunning { session.stopRunning() }
+        }
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.successFeedbackDuration
+        ) { [weak self] in
+            guard let self = self else { return }
+            self.delegate?.barcodeScan(self, didFinish: result)
+        }
     }
+
+    private func makeFrozenImage(from sampleBuffer: CMSampleBuffer) -> UIImage? {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+        guard let cgImage = imageContext.createCGImage(image, from: image.extent) else { return nil }
+        return UIImage(cgImage: cgImage, scale: 1, orientation: .right)
+    }
+
+    private func playSuccessBeep() {
+        guard options.beepEnabled else { return }
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
+            let player = try AVAudioPlayer(data: Self.successBeepData)
+            player.volume = 1
+            player.prepareToPlay()
+            successBeepPlayer = player
+            player.play()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self = self, self.successBeepPlayer === player else { return }
+                player.stop()
+                self.successBeepPlayer = nil
+                try? session.setActive(false, options: [.notifyOthersOnDeactivation])
+            }
+        } catch {
+            successBeepPlayer = nil
+        }
+    }
+
+    private static let successBeepData: Data = {
+        let sampleRate: UInt32 = 22_050
+        let sampleCount = Int(sampleRate / 10)
+        let dataSize = UInt32(sampleCount * 2)
+        var data = Data()
+
+        func appendASCII(_ value: String) {
+            data.append(contentsOf: value.utf8)
+        }
+        func appendUInt16(_ value: UInt16) {
+            var littleEndian = value.littleEndian
+            Swift.withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+        }
+        func appendUInt32(_ value: UInt32) {
+            var littleEndian = value.littleEndian
+            Swift.withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+        }
+        func appendInt16(_ value: Int16) {
+            appendUInt16(UInt16(bitPattern: value))
+        }
+
+        appendASCII("RIFF")
+        appendUInt32(36 + dataSize)
+        appendASCII("WAVE")
+        appendASCII("fmt ")
+        appendUInt32(16)
+        appendUInt16(1)
+        appendUInt16(1)
+        appendUInt32(sampleRate)
+        appendUInt32(sampleRate * 2)
+        appendUInt16(2)
+        appendUInt16(16)
+        appendASCII("data")
+        appendUInt32(dataSize)
+
+        for index in 0..<sampleCount {
+            let time = Double(index) / Double(sampleRate)
+            let remaining = Double(sampleCount - index) / Double(sampleRate)
+            let envelope = min(1, time / 0.005) * min(1, remaining / 0.025)
+            let value = sin(2 * Double.pi * 1_800 * time)
+                * envelope * Double(Int16.max) * 0.55
+            appendInt16(Int16(value.rounded()))
+        }
+        return data
+    }()
 
     private func fail(_ error: MlKitSuiteError) {
         guard !completed else { return }
@@ -378,7 +491,9 @@ extension BarcodeScanViewController: AVCaptureVideoDataOutputSampleBufferDelegat
                 self.processingFrame = false
                 guard !self.analysisFinished else { return }
                 if error == nil {
-                    self.handle(barcodes ?? [], imageSize: imageSize)
+                    self.handle(
+                        barcodes ?? [], imageSize: imageSize, sampleBuffer: sampleBuffer
+                    )
                 } else {
                     self.resetConfirmation()
                     self.updateOverlay(

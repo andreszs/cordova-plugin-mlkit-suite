@@ -81,6 +81,7 @@ struct BarcodeScanOptions {
     let formats: BarcodeFormat
     let showCloseButton: Bool
     let showTorchButton: Bool
+    let beepEnabled: Bool
     let instructionText: String
     let localization: MlKitLocalization
     let guideColor: UIColor?
@@ -90,7 +91,7 @@ struct BarcodeScanOptions {
         localization = try MlKitLocalization(dictionary: dictionary)
         let known = Set([
             "formats", "showCloseButton", "showTorchButton", "instructionText",
-            "guideColor", "timeoutMs", "moduleLoadingMessage", "locale"
+            "guideColor", "beepEnabled", "timeoutMs", "moduleLoadingMessage", "locale"
         ])
         for key in dictionary.keys where !known.contains(key) {
             throw MlKitSuiteError.invalidArgument("Unknown barcode scan option: \(key).")
@@ -124,6 +125,7 @@ struct BarcodeScanOptions {
         formats = try BarcodeFormatSupport.parse(dictionary["formats"])
         showCloseButton = try boolean("showCloseButton", fallback: true)
         showTorchButton = try boolean("showTorchButton", fallback: true)
+        beepEnabled = try boolean("beepEnabled", fallback: true)
         timeoutMs = try integer("timeoutMs", fallback: 0, minimum: 0, maximum: 600_000)
         if let raw = dictionary["instructionText"], !(raw is NSNull) {
             guard let string = raw as? String else {

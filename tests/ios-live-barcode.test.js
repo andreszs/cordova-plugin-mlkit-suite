@@ -40,9 +40,14 @@ assert(faceController.indexOf('automaticallyAdjustsVideoMirroring = false')
     < faceController.indexOf('isVideoMirrored = mirrored'));
 assert(controller.includes('VisionImage(buffer: sampleBuffer)'));
 assert(controller.includes('requiredConfirmationFrames = 2'));
+assert(controller.includes('successFeedbackDuration: TimeInterval = 0.45'));
+assert(controller.includes('overlayView.showSuccess('));
+assert(controller.includes('makeFrozenImage(from: sampleBuffer)'));
 assert(controller.includes('options.localization.text("barcode_center")'));
 assert(controller.includes('overlayView.contains('));
 assert(types.includes('guideColor must be a color in #RRGGBB format.'));
+assert(types.includes('beepEnabled = try boolean("beepEnabled", fallback: true)'));
+assert(controller.includes('AVAudioPlayer(data: Self.successBeepData)'));
 assert(controller.includes('setTorchModeOn'));
 assert(controller.includes('UIImage(systemName: systemName'));
 assert(controller.includes('accessibilityLabel'));

@@ -43,6 +43,7 @@
     <string name="mlkit_suite_barcode_searching">Buscando un código</string>
     <string name="mlkit_suite_barcode_center">Centrá el código dentro del recuadro</string>
     <string name="mlkit_suite_barcode_detected">%1$s detectado — mantené firme (%2$d/%3$d)</string>
+    <string name="mlkit_suite_barcode_success">Código detectado</string>
     <string name="mlkit_suite_barcode_analyze_failed">No se pudo analizar la imagen de la cámara</string>
     <string name="mlkit_suite_barcode_timeout">No se confirmó ningún código antes de agotar el tiempo.</string>
     <string name="mlkit_suite_barcode_cancelled">El usuario canceló el escaneo de códigos.</string>

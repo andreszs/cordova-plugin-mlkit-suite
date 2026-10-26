@@ -292,7 +292,7 @@ exports.barcode = {
      * by default; formats can be restricted to improve detection speed.
      *
      * @param {{formats?: string[]|string|null, showCloseButton?: boolean,
-     *          showTorchButton?: boolean,
+     *          showTorchButton?: boolean, beepEnabled?: boolean,
      *          instructionText?: string|null, guideColor?: string|null, timeoutMs?: number,
      *          moduleLoadingMessage?: string|null, locale?: string}} [options]
      * @returns {Promise<object>} A success result or {status: 'cancelled', reason: 'user'}.

@@ -2,7 +2,13 @@ package com.andreszs.plugins.mlkitsuite;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Rect;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,6 +19,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -38,6 +45,8 @@ import java.util.concurrent.Executors;
 public final class BarcodeScanActivity extends Activity
     implements LifecycleOwner, BarcodeFrameAnalyzer.Listener {
 
+    private static final long SUCCESS_FEEDBACK_MS = 450L;
+
     public static final String EXTRA_OPTIONS_JSON = "mlKitSuite.barcode.options";
     public static final String EXTRA_RESULT_JSON = "mlKitSuite.barcode.result";
     public static final String EXTRA_ERROR_CODE = "mlKitSuite.barcode.errorCode";
@@ -48,13 +57,16 @@ public final class BarcodeScanActivity extends Activity
     private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor();
     private LifecycleRegistry lifecycleRegistry;
     private BarcodeScanConfig config;
+    private FrameLayout rootView;
     private PreviewView previewView;
     private BarcodeOverlayView overlayView;
+    private ImageButton closeButton;
     private ImageButton torchButton;
     private ProcessCameraProvider cameraProvider;
     private ImageAnalysis imageAnalysis;
     private BarcodeFrameAnalyzer analyzer;
     private Camera camera;
+    private AudioTrack successBeep;
     private boolean torchEnabled;
     private boolean completed;
     private Runnable timeoutRunnable;
@@ -112,6 +124,7 @@ public final class BarcodeScanActivity extends Activity
         if (imageAnalysis != null) imageAnalysis.clearAnalyzer();
         if (analyzer != null) analyzer.close();
         if (cameraProvider != null) cameraProvider.unbindAll();
+        releaseSuccessBeep();
         analysisExecutor.shutdownNow();
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
         super.onDestroy();
@@ -123,27 +136,27 @@ public final class BarcodeScanActivity extends Activity
     }
 
     private void createInterface() {
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        rootView = new FrameLayout(this);
+        rootView.setBackgroundColor(Color.BLACK);
         previewView = new PreviewView(this);
         previewView.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
-        root.addView(previewView, matchParent());
+        rootView.addView(previewView, matchParent());
 
         overlayView = new BarcodeOverlayView(this, config.instructionText, config.guideColor,
             config.localization.text("barcode_searching"));
-        root.addView(overlayView, matchParent());
+        rootView.addView(overlayView, matchParent());
 
         if (config.showCloseButton) {
-            ImageButton close = cameraIconButton(
+            closeButton = cameraIconButton(
                 BarcodeIconDrawable.CLOSE, config.localization.text("close_barcode"), false
             );
-            close.setOnClickListener(view -> cancelByUser());
+            closeButton.setOnClickListener(view -> cancelByUser());
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(52), dp(52));
             params.gravity = Gravity.TOP | Gravity.START;
             params.topMargin = dp(12);
             params.leftMargin = dp(12);
-            root.addView(close, params);
+            rootView.addView(closeButton, params);
         }
 
         if (config.showTorchButton) {
@@ -156,9 +169,9 @@ public final class BarcodeScanActivity extends Activity
             params.gravity = Gravity.TOP | Gravity.END;
             params.topMargin = dp(12);
             params.rightMargin = dp(12);
-            root.addView(torchButton, params);
+            rootView.addView(torchButton, params);
         }
-        setContentView(root);
+        setContentView(rootView);
     }
 
     private ImageButton cameraIconButton(int icon, String description, boolean active) {
@@ -246,9 +259,26 @@ public final class BarcodeScanActivity extends Activity
     }
 
     @Override
-    public void onConfirmed(String text, String format) {
+    public void onConfirmed(String text, String format, Rect bounds,
+                            int imageWidth, int imageHeight) {
         if (completed) return;
         completed = true;
+        if (timeoutRunnable != null) mainHandler.removeCallbacks(timeoutRunnable);
+        if (imageAnalysis != null) imageAnalysis.clearAnalyzer();
+        Bitmap frozenFrame = previewView.getBitmap();
+        if (frozenFrame != null) {
+            ImageView frozenView = new ImageView(this);
+            frozenView.setImageBitmap(frozenFrame);
+            frozenView.setScaleType(ImageView.ScaleType.FIT_XY);
+            rootView.addView(frozenView, 1, matchParent());
+        }
+        if (cameraProvider != null) cameraProvider.unbindAll();
+        if (closeButton != null) closeButton.setVisibility(View.GONE);
+        if (torchButton != null) torchButton.setVisibility(View.GONE);
+        overlayView.showSuccess(bounds, imageWidth, imageHeight,
+            config.localization.text("barcode_success"));
+        playSuccessBeep();
+
         JSONObject result = new JSONObject();
         try {
             result.put("status", "success");
@@ -257,8 +287,10 @@ public final class BarcodeScanActivity extends Activity
         } catch (Exception ignored) { }
         Intent intent = new Intent();
         intent.putExtra(EXTRA_RESULT_JSON, result.toString());
-        setResult(RESULT_OK, intent);
-        finish();
+        mainHandler.postDelayed(() -> {
+            setResult(RESULT_OK, intent);
+            finish();
+        }, SUCCESS_FEEDBACK_MS);
     }
 
     @Override
@@ -295,6 +327,62 @@ public final class BarcodeScanActivity extends Activity
         timeoutRunnable = () -> finishWithError("TIMEOUT",
             config.localization.text("barcode_timeout"), true);
         mainHandler.postDelayed(timeoutRunnable, config.timeoutMs);
+    }
+
+    private void playSuccessBeep() {
+        if (!config.beepEnabled) return;
+        AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audioManager != null && audioManager.getRingerMode() != AudioManager.RINGER_MODE_NORMAL) {
+            return;
+        }
+        final int sampleRate = 22050;
+        final int sampleCount = sampleRate / 10;
+        byte[] pcm = new byte[sampleCount * 2];
+        for (int index = 0; index < sampleCount; index++) {
+            double time = index / (double) sampleRate;
+            double remaining = (sampleCount - index) / (double) sampleRate;
+            double envelope = Math.min(1d, time / 0.005d) * Math.min(1d, remaining / 0.025d);
+            short sample = (short) Math.round(Math.sin(2d * Math.PI * 1800d * time)
+                * envelope * Short.MAX_VALUE * 0.55d);
+            pcm[index * 2] = (byte) (sample & 0xff);
+            pcm[index * 2 + 1] = (byte) ((sample >>> 8) & 0xff);
+        }
+        try {
+            AudioTrack track = new AudioTrack.Builder()
+                .setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build())
+                .setAudioFormat(new AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build())
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(pcm.length)
+                .build();
+            if (track.write(pcm, 0, pcm.length) <= 0) {
+                track.release();
+                return;
+            }
+            releaseSuccessBeep();
+            successBeep = track;
+            track.play();
+            mainHandler.postDelayed(() -> {
+                if (successBeep == track) releaseSuccessBeep();
+            }, 250L);
+        } catch (Exception ignored) {
+            releaseSuccessBeep();
+        }
+    }
+
+    private void releaseSuccessBeep() {
+        if (successBeep == null) return;
+        try {
+            successBeep.stop();
+        } catch (Exception ignored) { }
+        successBeep.release();
+        successBeep = null;
     }
 
     private FrameLayout.LayoutParams matchParent() {

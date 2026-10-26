@@ -53,6 +53,7 @@
 "barcode_searching" = "Buscando un código";
 "barcode_center" = "Centrá el código dentro del recuadro";
 "barcode_detected" = "%@ detectado — mantené firme (%ld/%ld)";
+"barcode_success" = "Código detectado";
 "barcode_analyze_failed" = "No se pudo analizar la imagen de la cámara";
 "barcode_timeout" = "No se confirmó ningún código antes de agotar el tiempo.";
 "barcode_cancelled" = "El usuario canceló el escaneo de códigos.";

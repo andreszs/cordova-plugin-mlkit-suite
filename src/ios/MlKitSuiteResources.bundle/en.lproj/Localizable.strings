@@ -53,6 +53,7 @@
 "barcode_searching" = "Looking for a barcode";
 "barcode_center" = "Center the barcode inside the frame";
 "barcode_detected" = "Detected %@ — hold steady (%ld/%ld)";
+"barcode_success" = "Code detected";
 "barcode_analyze_failed" = "Unable to analyze the camera image";
 "barcode_timeout" = "No barcode was confirmed before the timeout.";
 "barcode_cancelled" = "Barcode scanning was cancelled by the user.";

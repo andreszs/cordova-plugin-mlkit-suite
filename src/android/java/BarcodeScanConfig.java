@@ -43,6 +43,7 @@ final class BarcodeScanConfig {
     final int[] formatValues;
     final boolean showCloseButton;
     final boolean showTorchButton;
+    final boolean beepEnabled;
     final String instructionText;
     final MlKitLocalization localization;
     final Integer guideColor;
@@ -50,6 +51,7 @@ final class BarcodeScanConfig {
 
     private BarcodeScanConfig(List<String> formatNames,
                               boolean showCloseButton, boolean showTorchButton,
+                              boolean beepEnabled,
                               String instructionText, MlKitLocalization localization,
                               Integer guideColor, long timeoutMs) {
         this.formatNames = Collections.unmodifiableList(formatNames);
@@ -59,6 +61,7 @@ final class BarcodeScanConfig {
         }
         this.showCloseButton = showCloseButton;
         this.showTorchButton = showTorchButton;
+        this.beepEnabled = beepEnabled;
         this.instructionText = instructionText;
         this.localization = localization;
         this.guideColor = guideColor;
@@ -72,11 +75,12 @@ final class BarcodeScanConfig {
         List<String> formats = parseFormats(value.opt("formats"));
         boolean close = strictBoolean(value, "showCloseButton", true);
         boolean torch = strictBoolean(value, "showTorchButton", true);
+        boolean beep = strictBoolean(value, "beepEnabled", true);
         String instruction = strictString(value, "instructionText",
             localization.text("barcode_instruction"));
         Integer guideColor = strictColor(value, "guideColor");
         long timeout = strictLong(value, "timeoutMs", 0L, 0L, 600000L);
-        return new BarcodeScanConfig(formats, close, torch, instruction, localization,
+        return new BarcodeScanConfig(formats, close, torch, beep, instruction, localization,
             guideColor, timeout);
     }
 
@@ -146,6 +150,7 @@ final class BarcodeScanConfig {
             String key = keys.next();
             if (!("formats".equals(key)
                 || "showCloseButton".equals(key) || "showTorchButton".equals(key)
+                || "beepEnabled".equals(key)
                 || "instructionText".equals(key) || "guideColor".equals(key)
                 || "timeoutMs".equals(key)
                 || "moduleLoadingMessage".equals(key) || "locale".equals(key))) {
