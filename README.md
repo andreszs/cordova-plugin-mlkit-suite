@@ -34,13 +34,13 @@ Extensible [Google ML Kit](https://developers.google.com/ml-kit) integration for
 
 | Module | Android | iOS |
 | --- | --- | --- |
-| [Barcode scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) | ✅ Live camera and still images | ✅ Live camera and still images |
-| [Document scanner](https://developers.google.com/ml-kit/vision/doc-scanner) | ✅ Available | ❌ Not available |
-| [Face detection](https://developers.google.com/ml-kit/vision/face-detection) | ✅ Guided face capture | ✅ Guided face capture |
-| [Image labeling](https://developers.google.com/ml-kit/vision/image-labeling) | ✅ Default model | ✅ Default model |
-| [Selfie segmentation](https://developers.google.com/ml-kit/vision/selfie-segmentation) | ✅ Transparent PNG | ✅ Transparent PNG |
-| [Subject segmentation](https://developers.google.com/ml-kit/vision/subject-segmentation) | ✅ Transparent PNG | ❌ Not available |
-| [Text recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2) | ✅ Latin script | ✅ Latin script |
+| [Barcode scanning](#barcode-scanning) | ✅ Live camera and still images | ✅ Live camera and still images |
+| [Document scanner](#document-scanning) | ✅ Available | ❌ Not available |
+| [Face detection](#face-capture) | ✅ Guided face capture | ✅ Guided face capture |
+| [Image labeling](#image-labeling) | ✅ Default model | ✅ Default model |
+| [Selfie segmentation](#selfie-segmentation) | ✅ Transparent PNG | ✅ Transparent PNG |
+| [Subject segmentation](#subject-segmentation) | ✅ Transparent PNG | ❌ Not available |
+| [Text recognition v2](#text-recognition-v2) | ✅ Latin script | ✅ Latin script |
 
 Android model delivery is configurable per module. Native plugin UI and errors support automatic, English, and Spanish localization.
 
@@ -326,7 +326,7 @@ document.querySelector("img").src = result.imageUri;
 
 The result shape and `maxDimension` rules match `segmentSelfie()`. The API is Android-only and unbundled: the plugin checks the Google Play services module, shows its localized loading spinner only when required, waits for installation, and then performs inference. Use `prepareModels("subject-segmentation")` to prepare it earlier without processing an image.
 
-### Text recognition
+### Text recognition v2
 
 `MlKit.recognizeText(imagePath, options?)` runs [ML Kit Text Recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2) for the Latin script against a local image and resolves to one plain string. Android uses the selected delivery mode; iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
 
@@ -339,7 +339,11 @@ console.log(text);
 
 `imagePath` can be an absolute native file path, a `file:` URI, an Android `content:` URI, or an `imageUri` previously returned by this plugin. Remote HTTP images are not fetched.
 
-### Barcode detection in an image
+### Barcode scanning
+
+Both barcode APIs use [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning). Use still-image detection for existing local files or the native camera flow for interactive scanning.
+
+#### Barcode detection in an image
 
 `MlKit.scanBarcodes(imagePath, options?)` uses [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) to analyze one existing local image and resolves to an array. It does not require the camera UI or two-frame confirmation.
 
@@ -362,7 +366,7 @@ Omit `formats` to enable every supported format. `moduleLoadingMessage` follows 
 
 `boundingBox` can be `null`; `cornerPoints` can be empty. Coordinates use the source image's pixel coordinate system. `valueType` is the platform ML Kit enum value, and `format` is one of the names below or `UNKNOWN` if the native SDK reports an unrecognized value.
 
-### Camera barcode scanning
+#### Camera barcode scanning
 
 `MlKit.barcode.scan(options?)` combines [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) with the plugin's own full-screen rear-camera UI on Android and iOS:
 
@@ -383,11 +387,11 @@ if (result.status === "success") {
 
 Android requests `1920×1080` analysis frames from CameraX; iOS requests the equivalent AVFoundation `hd1920x1080` preset. Each platform falls back to the closest suitable high-resolution stream supported by the camera. The four-color corner guide is the active scan region: codes outside it or crossing its edges are ignored. A result is returned only after two consecutive analyzed frames contain exactly the same non-empty text and format while fully inside the guide. A missing, outside, or different value resets confirmation. On success, the scanner freezes the confirmed camera frame and animates the guide onto the detected code before returning the result.
 
-#### Barcode formats
+##### Barcode formats
 
 Both barcode methods support `AZTEC`, `CODABAR`, `CODE_39`, `CODE_93`, `CODE_128`, `DATA_MATRIX`, `EAN_8`, `EAN_13`, `ITF`, `PDF_417`, `QR_CODE`, `UPC_A`, and `UPC_E`. `PDF417` aliases `PDF_417`; comma-separated strings are accepted in addition to arrays.
 
-#### Camera barcode options
+##### Camera barcode options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
