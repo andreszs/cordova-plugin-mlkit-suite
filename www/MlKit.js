@@ -271,7 +271,8 @@ exports.face = {
      *
      * @param {{outputWidth?: number, outputHeight?: number, jpegQuality?: number,
      *          showCloseButton?: boolean, debugMode?: boolean, beepEnabled?: boolean,
-     *          instructionText?: string|null, timeoutMs?: number,
+     *          revealCapture?: boolean, requireDeviceVertical?: boolean,
+     *          timeoutMs?: number,
      *          moduleLoadingMessage?: string|null, locale?: string,
      *          checks?: {singleFace?: boolean, faceSize?: boolean,
      *          centering?: boolean, pose?: boolean, eyesOpen?: boolean,

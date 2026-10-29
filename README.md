@@ -12,14 +12,21 @@
 ## Table of contents
 
 - [Overview](#overview)
-- [Screenshots](#screenshots)
 - [Compatibility](#compatibility)
 - [Quick start](#quick-start)
 - [Android model delivery](#android-model-delivery)
 - [Localization](#localization)
 - [API](#api)
+  - [Barcode scanning](#barcode-scanning)
+  - [Document scanning](#document-scanning)
+  - [Face capture](#face-capture)
+  - [Image labeling](#image-labeling)
+  - [Selfie segmentation](#selfie-segmentation)
+  - [Subject segmentation](#subject-segmentation)
+  - [Text recognition v2](#text-recognition-v2)
 - [Cancellation and errors](#cancellation-and-errors)
 - [Privacy and limitations](#privacy-and-limitations)
+- [Support](#support)
 - [Tests](#tests)
 
 ## Overview
@@ -43,23 +50,6 @@
 | [Text recognition v2](#text-recognition-v2) | ✅ Latin script | ✅ Latin script |
 
 Android model delivery is configurable per module. Native plugin UI and errors support automatic, English, and Spanish localization.
-
-## Screenshots
-
-<table>
-  <tr>
-    <th>Face capture<br><sub>Android shown</sub></th>
-    <th>Live barcode<br><sub>Android shown</sub></th>
-    <th>Document scanner<br><sub>Android only</sub></th>
-    <th>Text recognition<br><sub>iOS shown</sub></th>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/face-capture.png" alt="Guided face capture on Android" width="205"></td>
-    <td><img src="docs/screenshots/barcode-scanning.png" alt="Live barcode scanning on Android" width="205"></td>
-    <td><img src="docs/screenshots/document-scanning.jpg" alt="Native document scanner result on Android" width="205"></td>
-    <td><img src="docs/screenshots/ios-text-recognition.jpg" alt="Text recognition from a rotated gallery image on iOS" width="205"></td>
-  </tr>
-</table>
 
 ## Compatibility
 
@@ -185,7 +175,7 @@ await MlKit.face.capture({ locale: "es-AR" });
 await MlKit.barcode.scan({ locale: "auto" });
 ```
 
-`auto` is the default and uses the application/device language resolved natively at runtime. `en`, `es`, and BCP-47 tags such as `en-US` or `es-AR` are accepted; unsupported languages safely fall back to English. Explicit `instructionText` and `moduleLoadingMessage` values always take precedence, including an empty string.
+`auto` is the default and uses the application/device language resolved natively at runtime. `en`, `es`, and BCP-47 tags such as `en-US` or `es-AR` are accepted; unsupported languages safely fall back to English. Explicit barcode `instructionText` and `moduleLoadingMessage` values always take precedence, including an empty string.
 
 Android translations live in `src/android/res/values*/mlkit_suite_strings.xml`; iOS translations live in `src/ios/MlKitSuiteResources.bundle/*.lproj/Localizable.strings`. Add the same keys in a new platform locale directory to extend the plugin. Stable result values and error codes are never translated.
 
@@ -225,123 +215,20 @@ if (capabilities.document.scan && capabilities.document.deviceSupported) {
 
 The result contains `platform`, localization details, and `face`, `barcode`, `document`, `imageLabeling`, `selfieSegmentation`, `subjectSegmentation`, and `text` capability objects. Each module reports its configured `mode`, `ready` state, and `modelStatus` without starting a download. Android can report `mixed` when configurable module modes differ. Selfie Segmentation is bundled on both platforms; Subject Segmentation is an unbundled Android module. On iOS, Subject Segmentation and Document Scanner report `unsupported`.
 
-### Document scanning
-
-`MlKit.scanDocument(options?)` opens the [Google ML Kit Document Scanner](https://developers.google.com/ml-kit/vision/doc-scanner) on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
-
-The scanner UI, logic, and models are an on-demand Google Play services component. `scanDocument()` now prepares that component automatically and shows the native loading indicator only when a download is required. Call `prepareDocumentScanner()` earlier only when proactive preparation better suits the application flow:
-
-```javascript
-await MlKit.prepareDocumentScanner({
-    moduleLoadingMessage: "Preparing document scanner…"
-});
-```
-
-```javascript
-const result = await MlKit.scanDocument({
-    pageLimit: 4,
-    galleryImportAllowed: true,
-    resultFormats: ["JPEG", "PDF"],
-    scannerMode: "FULL",
-    moduleLoadingMessage: "Preparing document scanner…"
-});
-
-if (result.status === "success") {
-    document.querySelector("img").src = result.pages[0].imageUri;
-    console.log(result.pdf && result.pdf.path);
-}
-```
-
-The method performs device checks before requesting the Google scanner. Android versions below API 24 and devices with less than 1.7 GB of total RAM reject with `UNSUPPORTED_DEVICE` instead of opening native scanner code.
-
-#### Document options
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `pageLimit` | integer `1–100` | `1` | Maximum number of pages in one scan. |
-| `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
-| `resultFormats` | `string[] \| string \| null` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `null` uses the default; `JPG` aliases `JPEG`. |
-| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL" \| null` | `"FULL"` | Selects the native editing feature set. `null` uses the default. `BASE` still includes crop, rotation, page removal, and page reordering. |
-| `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading the scanner component. Empty string shows only the spinner. |
-| `locale` | `string` | `"auto"` | Plugin loading/error locale. Google's scanner UI resolves its own locale. |
-
-Unknown options, invalid types, empty result formats, and out-of-range values reject with `INVALID_ARGUMENT`.
-
-#### Document result
-
-Successful results contain `status`, a `pages` array, and an optional `pdf` object. Each page reports `imagePath`, WebView-safe `imageUri`, MIME type, byte size, width, and height. The PDF reports its native `path`, WebView-safe `uri`, MIME type, byte size, and page count.
-
-`pages` is empty when JPEG was not requested and `pdf` is `null` when PDF was not requested. Use `imageUri` inside the Cordova WebView and native paths with APIs such as `recognizeText()`, `scanBarcodes()`, `labelImage()`, `segmentSelfie()`, and `segmentSubjects()`.
-
-### Image labeling
-
-`MlKit.labelImage(imagePath, options?)` uses [ML Kit Image Labeling](https://developers.google.com/ml-kit/vision/image-labeling) to classify one local image with the general-purpose default model. It resolves to an array of labels ordered by the native SDK; an image with no matching labels resolves to `[]`.
-
-```javascript
-const labels = await MlKit.labelImage(imagePath, {
-    confidenceThreshold: 0.6,
-    moduleLoadingMessage: "Loading image labeling…"
-});
-
-for (const label of labels) {
-    console.log(label.text, label.confidence, label.index);
-}
-```
-
-```json
-[
-  { "text": "Food", "confidence": 0.93, "index": 12 }
-]
-```
-
-`confidenceThreshold` is an optional number from `0` to `1`; ML Kit's native default is used when omitted. Each result contains `text`, `confidence`, and the default model's `index`. Android follows the configured delivery mode; iOS bundles the model.
-
-### Selfie segmentation
-
-`MlKit.segmentSelfie(imagePath, options?)` uses [ML Kit Selfie Segmentation](https://developers.google.com/ml-kit/vision/selfie-segmentation) in single-image mode. It separates every person from the background and writes a temporary PNG whose alpha channel contains ML Kit's foreground-confidence mask.
-
-```javascript
-const result = await MlKit.segmentSelfie(imagePath, {
-    maxDimension: 2048
-});
-
-document.querySelector("img").src = result.imageUri;
-console.log(result.imagePath, result.width, result.height, result.bytes);
-```
-
-The successful result contains `status`, WebView-safe `imageUri`, native `imagePath`, `width`, `height`, `mimeType: "image/png"`, and `bytes`. `maxDimension` accepts an integer from `256` to `4096` and defaults to `2048`; larger inputs are proportionally reduced before processing. The model is bundled on Android and iOS, so this method never triggers a Play services download.
-
-### Subject segmentation
-
-`MlKit.segmentSubjects(imagePath, options?)` uses [ML Kit Subject Segmentation](https://developers.google.com/ml-kit/vision/subject-segmentation) on Android to isolate the combined foreground from people, animals, or objects and save it as a transparent PNG.
-
-```javascript
-const result = await MlKit.segmentSubjects(imagePath, {
-    maxDimension: 2048,
-    moduleLoadingMessage: "Loading subject segmentation…"
-});
-
-document.querySelector("img").src = result.imageUri;
-```
-
-The result shape and `maxDimension` rules match `segmentSelfie()`. The API is Android-only and unbundled: the plugin checks the Google Play services module, shows its localized loading spinner only when required, waits for installation, and then performs inference. Use `prepareModels("subject-segmentation")` to prepare it earlier without processing an image.
-
-### Text recognition v2
-
-`MlKit.recognizeText(imagePath, options?)` runs [ML Kit Text Recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2) for the Latin script against a local image and resolves to one plain string. Android uses the selected delivery mode; iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
-
-```javascript
-const text = await MlKit.recognizeText(result.pages[0].imagePath, {
-    moduleLoadingMessage: "Loading text recognition…"
-});
-console.log(text);
-```
-
-`imagePath` can be an absolute native file path, a `file:` URI, an Android `content:` URI, or an `imageUri` previously returned by this plugin. Remote HTTP images are not fetched.
-
 ### Barcode scanning
 
 Both barcode APIs use [ML Kit Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning). Use still-image detection for existing local files or the native camera flow for interactive scanning.
+
+<table>
+  <tr>
+    <th>Live scanner</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/barcode-scanning.png" alt="Live barcode scanning on Android" width="320"></td>
+    <td><img src="docs/screenshots/barcode-scanning-settings.png" alt="Barcode scanning settings in the Android demo" width="320"></td>
+  </tr>
+</table>
 
 #### Barcode detection in an image
 
@@ -405,20 +292,96 @@ Both barcode methods support `AZTEC`, `CODABAR`, `CODE_39`, `CODE_93`, `CODE_128
 | `locale` | `string` | `"auto"` | Plugin UI/error locale (`en`, `es`, or BCP-47). |
 | `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
 
+### Document scanning
+
+`MlKit.scanDocument(options?)` opens the [Google ML Kit Document Scanner](https://developers.google.com/ml-kit/vision/doc-scanner) on Android. The native flow handles capture, automatic edge detection, crop adjustment, rotation, cleanup, filters, and optional gallery import.
+
+<table>
+  <tr>
+    <th>Result</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/document-scanning.jpg" alt="Native document scanner result on Android" width="320"></td>
+    <td><img src="docs/screenshots/document-scanning-settings.png" alt="Document scanner settings in the Android demo" width="320"></td>
+  </tr>
+</table>
+
+The scanner UI, logic, and models are an on-demand Google Play services component. `scanDocument()` now prepares that component automatically and shows the native loading indicator only when a download is required. Call `prepareDocumentScanner()` earlier only when proactive preparation better suits the application flow:
+
+```javascript
+await MlKit.prepareDocumentScanner({
+    moduleLoadingMessage: "Preparing document scanner…"
+});
+```
+
+```javascript
+const result = await MlKit.scanDocument({
+    pageLimit: 4,
+    galleryImportAllowed: true,
+    resultFormats: ["JPEG", "PDF"],
+    scannerMode: "FULL",
+    moduleLoadingMessage: "Preparing document scanner…"
+});
+
+if (result.status === "success") {
+    document.querySelector("img").src = result.pages[0].imageUri;
+    console.log(result.pdf && result.pdf.path);
+}
+```
+
+The method performs device checks before requesting the Google scanner. Android versions below API 24 and devices with less than 1.7 GB of total RAM reject with `UNSUPPORTED_DEVICE` instead of opening native scanner code.
+
+#### Document options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pageLimit` | integer `1–100` | `1` | Maximum number of pages in one scan. |
+| `galleryImportAllowed` | `boolean` | `true` | Allows importing document images from the gallery. |
+| `resultFormats` | `string[] \| string \| null` | `["JPEG", "PDF"]` | Requests JPEG pages, a PDF, or both. A comma-separated string is accepted. `null` uses the default; `JPG` aliases `JPEG`. |
+| `scannerMode` | `"BASE" \| "BASE_WITH_FILTER" \| "FULL" \| null` | `"FULL"` | Selects the native editing feature set. `null` uses the default. `BASE` still includes crop, rotation, page removal, and page reordering. |
+| `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading the scanner component. Empty string shows only the spinner. |
+| `locale` | `string` | `"auto"` | Plugin loading/error locale. Google's scanner UI resolves its own locale. |
+
+Unknown options, invalid types, empty result formats, and out-of-range values reject with `INVALID_ARGUMENT`.
+
+#### Document result
+
+Successful results contain `status`, a `pages` array, and an optional `pdf` object. Each page reports `imagePath`, WebView-safe `imageUri`, MIME type, byte size, width, and height. The PDF reports its native `path`, WebView-safe `uri`, MIME type, byte size, and page count.
+
+`pages` is empty when JPEG was not requested and `pdf` is `null` when PDF was not requested. Use `imageUri` inside the Cordova WebView and native paths with APIs such as `recognizeText()`, `scanBarcodes()`, `labelImage()`, `segmentSelfie()`, and `segmentSubjects()`.
+
 ### Face capture
 
-`MlKit.face.capture(options?)` combines [ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) with a full-screen native front-camera guide and resolves after a valid JPEG is captured:
+`MlKit.face.capture(options?)` combines [ML Kit Face Detection](https://developers.google.com/ml-kit/vision/face-detection) with a full-screen native front-camera guide and resolves after a valid JPEG is captured.
+
+<table>
+  <tr>
+    <th>Guided capture</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/face-capture.png" alt="Guided face capture with anonymized oval content on Android" width="320"></td>
+    <td><img src="docs/screenshots/face-capture-settings.png" alt="Face capture settings in the Android demo" width="320"></td>
+  </tr>
+</table>
+
+Example:
 
 ```javascript
 const result = await MlKit.face.capture({
     outputWidth: 600,
     outputHeight: 720,
+    gestures: ["OPEN_MOUTH", "NOD"],
+    captureAfterGesture: 1,
+    revealCapture: false,
+    requireDeviceVertical: true,
     debugMode: false,
-    timeoutMs: 45000
+    timeoutMs: 90000
 });
 ```
 
-All checks are enabled by default. Capture starts automatically only after they remain acceptable for a short stability window.
+All checks except `eyesOpen` and `neutralExpression` are enabled by default. Capture starts automatically only after the enabled checks remain acceptable for a short stability window.
 
 #### Face options
 
@@ -428,13 +391,19 @@ All checks are enabled by default. Capture starts automatically only after they 
 | `outputHeight` | integer `320–2048` | `720` | Exact JPEG height in pixels and crop aspect ratio. |
 | `jpegQuality` | integer `50–100` | `95` | JPEG encoding quality. |
 | `showCloseButton` | `boolean` | `true` | Shows the native close button. |
-| `debugMode` | `boolean` | `false` | Shows face bounds and live quality values without weakening validation. |
+| `debugMode` | `boolean` | `false` | Shows only active live requirements. During gestures, a compact responsive panel exposes the tracker phase, current relative movement, exact target, and a visual acceptance meter. Without gestures it keeps the compact active-check view, including device tilt when enabled. Validation is not weakened. |
 | `beepEnabled` | `boolean` | `true` | Plays a short synthesized confirmation beep after a successful capture. Device silent mode is respected. |
-| `instructionText` | `string \| null` | `"Place your face inside the oval"` | Text shown above the guide. An empty string hides it. |
+| `revealCapture` | `boolean` | `true` | Shows the capturing state and message. Set to `false` to take the photo without revealing the exact moment. |
+| `requireDeviceVertical` | `boolean` | `true` | Requires the phone to remain within ±10° of vertical for 700 ms before accepting the face or arming a gesture. The overlay asks the user to position it at eye level. Set to `false` to disable this sensor gate. |
 | `moduleLoadingMessage` | `string \| null` | localized | Android text shown only while downloading Face Detection. Empty string shows only the spinner. |
 | `locale` | `string` | `"auto"` | Plugin UI/error locale (`en`, `es`, or BCP-47). |
-| `checks` | `object \| null` | all enabled | Enables or disables individual capture gates. |
-| `timeoutMs` | integer `0–600000` | `0` | Session timeout in milliseconds. `0` disables it. |
+| `gestures` | `string[]` | `[]` | Ordered challenge sequence, with at most five gestures. Each gesture is armed only after the face remains frontal and neutral for a stability pause, and then ends in a neutral pose. |
+| `captureAfterGesture` | `integer` | gesture count | Captures after this many completed gestures. Use `1` with two gestures to keep the candidate private until the second gesture succeeds. |
+| `gestureTimeoutMs` | `integer 1000–15000` | `4000` | Maximum time to complete each armed gesture. |
+| `neutralTimeoutMs` | `integer 500–5000` | `2000` | Maximum time to return to neutral after a gesture. |
+| `retryMessageMs` | `integer 250–3000` | `1000` | Time the restart message remains visible before the whole sequence resets. |
+| `checks` | `object \| null` | see below | Enables or disables individual capture gates. |
+| `timeoutMs` | integer `0–600000` | `90000` | Face-capture timeout in milliseconds (90 seconds by default). `0` disables it. |
 
 #### Optional face checks
 
@@ -442,10 +411,10 @@ All checks are enabled by default. Capture starts automatically only after they 
 | --- | --- | --- |
 | `singleFace` | `true` | Requires exactly one detected face. |
 | `faceSize` | `true` | Rejects faces that are too small or too close. |
-| `centering` | `true` | Requires the face near the guide center. |
+| `centering` | `true` | Projects the detected face into the visible camera preview and requires its center to remain inside the oval's central safe region. The check is suspended while an armed gesture is being performed. |
 | `pose` | `true` | Limits head yaw, pitch, and roll. |
-| `eyesOpen` | `true` | Requires both eye-open probabilities to pass the internal threshold. |
-| `neutralExpression` | `true` | Rejects a high smiling probability. |
+| `eyesOpen` | `false` | Requires both eye-open probabilities to pass the internal threshold. Disabled by default because ML Kit may not classify every user's eyes reliably. |
+| `neutralExpression` | `false` | Rejects a high smiling probability. Disabled by default because expression classification can vary between users. |
 | `stability` | `true` | Requires a stable face position before capture. |
 | `sharpness` | `true` | Rejects low-detail frames and final images. |
 | `brightness` | `true` | Rejects images that are too dark or too bright. |
@@ -455,6 +424,173 @@ All checks are enabled by default. Capture starts automatically only after they 
 Successful results include the JPEG's `imagePath`, WebView-safe `imageUri`, dimensions, MIME type, byte size, and capture time. The `quality` object contains brightness and sharpness; `face` contains yaw, pitch, roll, eye-open probabilities, and smiling probability; `appliedChecks` records the checks used for capture.
 
 Cache files are temporary. Eye-open and smiling probabilities can be `null` when ML Kit does not provide them.
+
+Supported gesture names are `OPEN_MOUTH`, `BLINK`, `SMILE`, `LOOK_UP`, `LOOK_DOWN`, `NOD`,
+and `SHAKE`. `NOD` requires looking up and then down before returning
+to neutral, and the overlay identifies the current up/down subphase. While any gesture is active,
+centering and pose guidance cannot replace the gesture instruction. Both stages of `SHAKE` use the same
+15-degree horizontal threshold. `SHAKE` requires right first and then left, with matching subphase guidance. The successful result
+includes `completedGestures` in the requested order. These active challenges are capture gates,
+not presentation-attack detection by themselves.
+
+After every accepted gesture phase, its instruction remains visible in green for 500 ms. This applies
+to both subphases of `NOD` and `SHAKE` and to every single-phase gesture. Gesture evaluation and its
+timeout are frozen during the confirmation pause; the oval also turns green and the corresponding
+progress segment advances to its next success color. The next instruction appears only after the pause
+ends.
+
+The first gesture cannot be satisfied by movement made while the camera is opening. The plugin first
+requires a frontal neutral face for 650 ms before arming it. The same pause is required before every
+later gesture, so movement from the previous gesture cannot spill into the next one. Gesture angles
+are measured relative to that stable neutral pose, avoiding false rejections caused by a small natural
+ML Kit pitch or yaw offset. Before arming, pitch outside the frontal range produces a directional
+instruction to raise or lower the head instead of the generic look-straight message.
+
+By default, face capture also uses the device gravity sensor as an initial positioning gate. The phone
+must remain within ±10° of vertical for 700 ms before face framing, gesture validation, or capture
+can proceed. Tilting it beyond the exit tolerance invalidates an active gesture sequence. Devices that
+do not expose a usable gravity or motion sensor continue without this gate. This check helps establish
+the intended posture but is not, by itself, presentation-attack detection.
+
+The native overlay shows progress as a segmented bar instead of a numeric gesture counter. It contains
+one segment for the initial accepted face, one per requested gesture, and one for the photo capture.
+Completed segments remain green, the current segment is yellow, and future segments remain gray;
+therefore one gesture produces three segments and two gestures produce four. Compound gestures retain
+an intermediate yellow-green segment after their first accepted subphase and turn fully green after
+their second. Every segment color change uses the same smooth 260 ms transition. Overlay labels wrap
+within the safe screen width.
+The segmented bar is placed directly below the oval; no secondary instruction label is rendered in
+that lower region.
+The overlay reserves separate responsive regions for guidance, progress, framing, instructions, and
+optional debug metrics. On shorter screens it reduces and lowers the oval before allowing labels to
+overlap; debug metrics use a compact secondary layout and consume no space when debug mode is off.
+When gestures are active in debug mode, the compact metrics are replaced by a contextual tracker panel.
+It shows the neutral and action phases, current relative value, exact threshold, and a visual acceptance
+meter. Secondary raw, baseline, remaining-distance, and hold-time lines are omitted to preserve space.
+The panel height follows this compact content and ends immediately below the meter.
+The final segment, green `Ready` message, confirmation beep, and successful result are emitted only
+after the JPEG passes final processing; `Ready` is never shown while that processing is still pending.
+
+When `captureAfterGesture` is before the end of the sequence, the JPEG remains private to the
+native plugin. It is returned only after all later gestures pass in the same camera session. A
+timeout, prolonged missing/replaced face, invalid final frame, or capture failure deletes the candidate and
+restarts the complete sequence.
+
+During an active gesture, a face-tracking interruption of up to 300 ms freezes all gesture and hold
+timers without advancing a subphase or permitting capture. Tracking resumes from the same point if the
+face returns within that margin; a longer interruption restarts the complete sequence.
+
+### Image labeling
+
+`MlKit.labelImage(imagePath, options?)` uses [ML Kit Image Labeling](https://developers.google.com/ml-kit/vision/image-labeling) to classify one local image with the general-purpose default model. It resolves to an array of labels ordered by the native SDK; an image with no matching labels resolves to `[]`.
+
+<table>
+  <tr>
+    <th>Demo workflow</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/image-labeling.png" alt="Image labeling workflow in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/image-labeling-settings.png" alt="Image labeling settings in the Android demo" width="320"></td>
+  </tr>
+</table>
+
+```javascript
+const labels = await MlKit.labelImage(imagePath, {
+    confidenceThreshold: 0.6,
+    moduleLoadingMessage: "Loading image labeling…"
+});
+
+for (const label of labels) {
+    console.log(label.text, label.confidence, label.index);
+}
+```
+
+```json
+[
+  { "text": "Food", "confidence": 0.93, "index": 12 }
+]
+```
+
+`confidenceThreshold` is an optional number from `0` to `1`; ML Kit's native default is used when omitted. Each result contains `text`, `confidence`, and the default model's `index`. Android follows the configured delivery mode; iOS bundles the model.
+
+### Selfie segmentation
+
+`MlKit.segmentSelfie(imagePath, options?)` uses [ML Kit Selfie Segmentation](https://developers.google.com/ml-kit/vision/selfie-segmentation) in single-image mode. It separates every person from the background and writes a temporary PNG whose alpha channel contains ML Kit's foreground-confidence mask.
+
+<table>
+  <tr>
+    <th>Demo workflow</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/selfie-segmentation.png" alt="Selfie segmentation workflow in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/selfie-segmentation-settings.png" alt="Selfie segmentation settings in the Android demo" width="320"></td>
+  </tr>
+</table>
+
+```javascript
+const result = await MlKit.segmentSelfie(imagePath, {
+    maxDimension: 2048
+});
+
+document.querySelector("img").src = result.imageUri;
+console.log(result.imagePath, result.width, result.height, result.bytes);
+```
+
+The successful result contains `status`, WebView-safe `imageUri`, native `imagePath`, `width`, `height`, `mimeType: "image/png"`, and `bytes`. `maxDimension` accepts an integer from `256` to `4096` and defaults to `2048`; larger inputs are proportionally reduced before processing. The model is bundled on Android and iOS, so this method never triggers a Play services download.
+
+### Subject segmentation
+
+`MlKit.segmentSubjects(imagePath, options?)` uses [ML Kit Subject Segmentation](https://developers.google.com/ml-kit/vision/subject-segmentation) on Android to isolate the combined foreground from people, animals, or objects and save it as a transparent PNG.
+
+<table>
+  <tr>
+    <th>Demo workflow</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/subject-segmentation.png" alt="Subject segmentation workflow in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/subject-segmentation-settings.png" alt="Subject segmentation settings in the Android demo" width="320"></td>
+  </tr>
+</table>
+
+```javascript
+const result = await MlKit.segmentSubjects(imagePath, {
+    maxDimension: 2048,
+    moduleLoadingMessage: "Loading subject segmentation…"
+});
+
+document.querySelector("img").src = result.imageUri;
+```
+
+The result shape and `maxDimension` rules match `segmentSelfie()`. The API is Android-only and unbundled: the plugin checks the Google Play services module, shows its localized loading spinner only when required, waits for installation, and then performs inference. Use `prepareModels("subject-segmentation")` to prepare it earlier without processing an image.
+
+### Text recognition v2
+
+`MlKit.recognizeText(imagePath, options?)` runs [ML Kit Text Recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2) for the Latin script against a local image and resolves to one plain string. Android uses the selected delivery mode; iOS always bundles the recognizer. An image containing no recognized text resolves to `""`.
+
+Text Recognition v2 has no module-specific settings, so its pair shows the input workflow and a completed result instead.
+
+<table>
+  <tr>
+    <th>Input workflow<br><sub>Android shown</sub></th>
+    <th>Result<br><sub>iOS shown</sub></th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/text-recognition-input.png" alt="Text recognition input workflow in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/ios-text-recognition.jpg" alt="Text recognition from a rotated gallery image on iOS" width="320"></td>
+  </tr>
+</table>
+
+```javascript
+const text = await MlKit.recognizeText(result.pages[0].imagePath, {
+    moduleLoadingMessage: "Loading text recognition…"
+});
+console.log(text);
+```
+
+`imagePath` can be an absolute native file path, a `file:` URI, an Android `content:` URI, or an `imageUri` previously returned by this plugin. Remote HTTP images are not fetched.
 
 ## Cancellation and errors
 
@@ -515,6 +651,19 @@ The included Apple privacy manifest declares no tracking, collected data, or req
 - The face oval is a visual guide; the returned JPEG is rectangular.
 - Cache URLs are session-local and are not durable storage.
 - Camera and document-scanner behavior must be validated on representative physical devices.
+
+## Support
+
+If `cordova-plugin-mlkit-suite` is useful to you, consider [starring the repository](https://github.com/andreszs/cordova-plugin-mlkit-suite). Stars help other Cordova developers discover the project.
+
+Financial contributions help cover the tools and devices used to develop, maintain, and test this and other open-source projects:
+
+- [Ko-fi](https://ko-fi.com/D1D716OLPM)
+- [PayPal](https://www.paypal.com/ncp/payment/GEEM324PDD9NC)
+- USDC on Arbitrum One: `0xe36a336fC6cc9Daae657b4A380dA492AB9601e73`
+
+> [!CAUTION]
+> Send USDC using the Arbitrum One network only. Transfers sent through another network may be permanently lost.
 
 ## Tests
 

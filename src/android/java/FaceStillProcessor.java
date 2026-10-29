@@ -144,13 +144,8 @@ final class FaceStillProcessor {
     private void validateFace(Face face, int width, int height) throws RetryException {
         Rect box = face.getBoundingBox();
         float fraction = box.width() / (float) width;
-        float offset = (float) Math.hypot(box.exactCenterX() / width - 0.5f,
-            box.exactCenterY() / height - 0.44f);
         if (config.checks.faceSize && fraction < 0.22f) {
             throw new RetryException(config.localization.text("face_move_closer_retry"));
-        }
-        if (config.checks.centering && offset > 0.18f) {
-            throw new RetryException(config.localization.text("face_center_retry"));
         }
         if (config.checks.pose && (Math.abs(face.getHeadEulerAngleY()) > 13f
             || Math.abs(face.getHeadEulerAngleX()) > 13f || Math.abs(face.getHeadEulerAngleZ()) > 11f)) {

@@ -37,9 +37,11 @@ var iosSpanish = keys(
 assert.deepStrictEqual(androidSpanish, androidEnglish, 'Android locale keys must match.');
 assert.deepStrictEqual(iosSpanish, iosEnglish, 'iOS locale keys must match.');
 assert(androidEnglish.includes('face_instruction'));
+assert(androidEnglish.includes('face_device_vertical'));
 assert(androidEnglish.includes('barcode_instruction'));
 assert(androidEnglish.includes('loading_module'));
 assert(iosEnglish.includes('face_instruction'));
+assert(iosEnglish.includes('face_device_vertical'));
 assert(iosEnglish.includes('barcode_instruction'));
 
 var pluginXml = read('plugin.xml');

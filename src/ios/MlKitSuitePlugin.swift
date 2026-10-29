@@ -569,7 +569,9 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "rightEyeOpenProbability": nullable(result.rightEye),
                 "smilingProbability": nullable(result.smile)
             ],
-            "appliedChecks": options.checks.dictionary
+            "appliedChecks": options.checks.dictionary,
+            "completedGestures": options.gestures.map { $0.rawValue },
+            "captureAfterGesture": options.captureAfterGesture
         ]
     }
 

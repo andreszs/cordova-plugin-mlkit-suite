@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreMotion
 import MLKitFaceDetection
 import MLKitVision
 import UIKit
@@ -10,6 +11,10 @@ protocol FaceCaptureViewControllerDelegate: AnyObject {
 }
 
 final class FaceCaptureViewController: UIViewController {
+    private static let deviceVerticalHold: CFTimeInterval = 0.7
+    private static let deviceVerticalEnterDegrees: Double = 10
+    private static let deviceVerticalExitDegrees: Double = 10
+    private static let faceLossGrace: CFTimeInterval = 0.30
     weak var delegate: FaceCaptureViewControllerDelegate?
 
     private let options: FaceCaptureOptions
@@ -19,27 +24,46 @@ final class FaceCaptureViewController: UIViewController {
     private let processingQueue = DispatchQueue(label: "com.andreszs.mlkitsuite.processing", qos: .userInitiated)
     private let liveDetector: FaceDetector
     private let stillProcessor: FaceStillProcessor
+    private let gestureTracker: FaceGestureTracker
     private let successBeep = MlKitSuccessBeep()
+    private let motionManager = CMMotionManager()
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var overlayView: FaceOverlayView!
     private var videoOutput: AVCaptureVideoDataOutput?
     private var processingFrame = false
     private var capturing = false
+    private var capturingCandidate = false
     private var completed = false
+    private var pendingCandidate: FaceCaptureResult?
+    private var lastCaptureAnalysis: FaceCaptureAnalysis?
     private var previousBounds: CGRect?
     private var stableSince: CFTimeInterval = 0
     private var stableFrames = 0
     private var timeoutItem: DispatchWorkItem?
+    private var deviceVerticalReady: Bool
+    private var deviceVerticalSince: CFTimeInterval = 0
+    private var faceMissingSince: CFTimeInterval = 0
+    private let centeringLock = NSLock()
+    private var centeringPreviewSize: CGSize = .zero
+    private var centeringGuide: CGRect = .zero
     init(options: FaceCaptureOptions) {
         self.options = options
         let detectorOptions = FaceDetectorOptions()
         detectorOptions.performanceMode = .fast
         detectorOptions.landmarkMode = .none
         detectorOptions.classificationMode = .all
+        detectorOptions.contourMode = options.gestures.contains(.openMouth) ? .all : .none
         detectorOptions.minFaceSize = 0.15
         detectorOptions.isTrackingEnabled = true
         liveDetector = FaceDetector.faceDetector(options: detectorOptions)
         stillProcessor = FaceStillProcessor(options: options)
+        gestureTracker = FaceGestureTracker(
+            gestures: options.gestures, captureAfterGesture: options.captureAfterGesture,
+            gestureTimeoutMs: options.gestureTimeoutMs,
+            neutralTimeoutMs: options.neutralTimeoutMs,
+            retryMessageMs: options.retryMessageMs
+        )
+        deviceVerticalReady = !options.requireDeviceVertical
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
         modalPresentationCapturesStatusBarAppearance = true
@@ -61,10 +85,15 @@ final class FaceCaptureViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
         overlayView = FaceOverlayView(
-            instruction: options.instructionText,
+            localization: options.localization,
             debugMode: options.debugMode,
             checks: options.checks,
-            initialMessage: options.localization.text("face_searching")
+            initialMessage: options.localization.text("face_searching"),
+            progressSegments: options.gestures.count + 2,
+            captureAfterGesture: options.captureAfterGesture,
+            hasGestures: !options.gestures.isEmpty,
+            deviceVerticalCheckEnabled: options.requireDeviceVertical
+                && motionManager.isDeviceMotionAvailable
         )
         overlayView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(overlayView)
@@ -75,6 +104,7 @@ final class FaceCaptureViewController: UIViewController {
             overlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         if options.showCloseButton { addCloseButton() }
+        startVerticalityMonitoring()
         scheduleTimeout()
         configureCamera()
     }
@@ -82,10 +112,17 @@ final class FaceCaptureViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer.frame = view.bounds
+        let previewSize = previewLayer.bounds.size
+        let guide = overlayView.centeringGuide()
+        centeringLock.lock()
+        centeringPreviewSize = previewSize
+        centeringGuide = guide
+        centeringLock.unlock()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        motionManager.stopDeviceMotionUpdates()
         sessionQueue.async { [session] in
             if session.isRunning { session.stopRunning() }
         }
@@ -93,24 +130,29 @@ final class FaceCaptureViewController: UIViewController {
 
     func abortForWebViewReset() {
         guard !completed else { return }
+        discardPendingCandidate()
         completed = true
         timeoutItem?.cancel()
         dismiss(animated: false)
     }
 
     private func addCloseButton() {
-        let button = UIButton(type: .system)
-        button.setTitle(options.localization.text("close"), for: .normal)
+        let button = UIButton(type: .custom)
+        button.setTitle("×", for: .normal)
         button.accessibilityLabel = options.localization.text("close_face")
         button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        button.titleLabel?.font = .systemFont(ofSize: 30, weight: .regular)
+        button.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+        button.layer.borderColor = UIColor.white.withAlphaComponent(0.6).cgColor
+        button.layer.borderWidth = 1
+        button.layer.cornerRadius = 22
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(cancelByUser), for: .touchUpInside)
         view.addSubview(button)
         NSLayoutConstraint.activate([
-            button.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-            button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 64),
+            button.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            button.widthAnchor.constraint(equalToConstant: 44),
             button.heightAnchor.constraint(equalToConstant: 44)
         ])
     }
@@ -179,13 +221,62 @@ final class FaceCaptureViewController: UIViewController {
 
     private func classify(faces: [Face], brightness: CGFloat, sharpness: CGFloat,
                           imageSize: CGSize) -> FaceCaptureAnalysis {
+        let now = CACurrentMediaTime()
+        if options.requireDeviceVertical && !deviceVerticalReady {
+            resetStability()
+            faceMissingSince = 0
+            let progress = gestureTracker.progress
+            if !options.gestures.isEmpty && (gestureTracker.hasStarted || progress.stage == .retry) {
+                if progress.stage != .retry { gestureTracker.retry(now: now) }
+                return emptyAnalysis(.gesture, brightness, sharpness,
+                                     progress: gestureTracker.progress)
+            }
+            gestureTracker.reset()
+            return emptyAnalysis(.deviceTilted, brightness, sharpness)
+        }
         guard !faces.isEmpty else {
             resetStability()
+            if !options.gestures.isEmpty && gestureTracker.hasStarted {
+                if faceMissingSince == 0 { faceMissingSince = now }
+                if now - faceMissingSince <= Self.faceLossGrace {
+                    var progress = gestureTracker.progress
+                    // Keep the internal capture checkpoint frozen, but never expose capture
+                    // until a face is present again.
+                    if progress.stage == .capture {
+                        progress = FaceGestureProgress(
+                            gesture: progress.gesture, stage: .returnNeutral,
+                            index: progress.index, count: progress.count,
+                            debug: progress.debug, phaseFeedback: progress.phaseFeedback
+                        )
+                    }
+                    return emptyAnalysis(.gesture, brightness, sharpness,
+                                         progress: progress)
+                }
+                gestureTracker.retry(now: now)
+                faceMissingSince = 0
+                return emptyAnalysis(.gesture, brightness, sharpness,
+                                     progress: gestureTracker.progress)
+            }
+            faceMissingSince = 0
+            gestureTracker.reset()
             return emptyAnalysis(.searching, brightness, sharpness)
         }
         if options.checks.singleFace && faces.count != 1 {
             resetStability()
+            faceMissingSince = 0
+            if !options.gestures.isEmpty && gestureTracker.hasStarted {
+                gestureTracker.retry(now: now)
+                return emptyAnalysis(.gesture, brightness, sharpness,
+                                     progress: gestureTracker.progress)
+            }
+            gestureTracker.reset()
             return emptyAnalysis(.multipleFaces, brightness, sharpness)
+        }
+        if faceMissingSince != 0 {
+            gestureTracker.resumeAfterFaceLoss(
+                duration: min(Self.faceLossGrace, now - faceMissingSince)
+            )
+            faceMissingSince = 0
         }
         let face = faces.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }!
         let frame = face.frame
@@ -195,27 +286,56 @@ final class FaceCaptureViewController: UIViewController {
             width: max(0, min(1, frame.width / imageSize.width)),
             height: max(0, min(1, frame.height / imageSize.height))
         )
-        let centerOffset = hypot(bounds.midX - 0.5, bounds.midY - 0.44)
+        centeringLock.lock()
+        let previewSize = centeringPreviewSize
+        let guide = centeringGuide
+        centeringLock.unlock()
+        let centering = FaceCenteringGeometry.evaluate(
+            faceBounds: bounds, imageSize: imageSize,
+            previewSize: previewSize, guide: guide, mirrored: false
+        )
         let leftEye = face.hasLeftEyeOpenProbability ? face.leftEyeOpenProbability : nil
         let rightEye = face.hasRightEyeOpenProbability ? face.rightEyeOpenProbability : nil
         let smile = face.hasSmilingProbability ? face.smilingProbability : nil
+        let yaw = face.hasHeadEulerAngleY ? face.headEulerAngleY : 0
+        let pitch = face.hasHeadEulerAngleX ? face.headEulerAngleX : 0
+        let roll = face.hasHeadEulerAngleZ ? face.headEulerAngleZ : 0
+        let mouthRatio = mouthOpenRatio(face)
+        var gestureProgress = gestureTracker.tick(now: now)
+        let activeGesture = gestureProgress.stage == .perform
+            || gestureProgress.stage == .returnNeutral
+            || gestureProgress.stage == .capture
         var state: FaceCaptureState
-        if options.checks.faceSize && bounds.width < 0.28 { state = .moveCloser }
+        if gestureProgress.stage == .retry { state = .gesture }
+        else if activeGesture {
+            gestureProgress = gestureTracker.update(
+                yaw: yaw, pitch: pitch, roll: roll, leftEye: leftEye, rightEye: rightEye,
+                smile: smile, mouthOpenRatio: mouthRatio, now: now
+            )
+            state = .gesture
+        }
+        else if options.checks.faceSize && bounds.width < 0.28 { state = .moveCloser }
         else if options.checks.faceSize && bounds.width > 0.62 { state = .moveAway }
-        else if options.checks.centering && centerOffset > 0.13 { state = .centerFace }
-        else if options.checks.pose && (
-            (face.hasHeadEulerAngleY && abs(face.headEulerAngleY) > 11)
-                || (face.hasHeadEulerAngleX && abs(face.headEulerAngleX) > 11)
-                || (face.hasHeadEulerAngleZ && abs(face.headEulerAngleZ) > 9)
+        else if options.checks.centering
+            && (!centering.available || !centering.accepted) { state = .centerFace }
+        else if options.checks.brightness && brightness < 0.20 { state = .improveLighting }
+        else if options.checks.brightness && brightness > 0.88 { state = .reduceLighting }
+        else if options.checks.sharpness && sharpness < 0.10 { state = .holdStill }
+        else if !gestureTracker.isComplete {
+            gestureProgress = gestureTracker.update(
+                yaw: yaw, pitch: pitch, roll: roll, leftEye: leftEye, rightEye: rightEye,
+                smile: smile, mouthOpenRatio: mouthRatio, now: now
+            )
+            state = .gesture
+        } else if options.checks.pose && (
+            abs(yaw) > 11 || abs(pitch) > 11 || abs(roll) > 9
         ) { state = .lookStraight }
         else if options.checks.eyesOpen && (
             leftEye == nil || rightEye == nil || leftEye! < 0.62 || rightEye! < 0.62
         ) { state = .openEyes }
         else if options.checks.neutralExpression && smile != nil && smile! > 0.38 {
             state = .neutralExpression
-        } else if options.checks.brightness && brightness < 0.20 { state = .improveLighting }
-        else if options.checks.brightness && brightness > 0.88 { state = .reduceLighting }
-        else if options.checks.sharpness && sharpness < 0.10 { state = .holdStill }
+        }
         else { state = .ready }
 
         var stableMs = 0
@@ -227,11 +347,14 @@ final class FaceCaptureViewController: UIViewController {
         }
         return FaceCaptureAnalysis(
             state: state, normalizedBounds: bounds,
-            yaw: face.hasHeadEulerAngleY ? face.headEulerAngleY : 0,
-            pitch: face.hasHeadEulerAngleX ? face.headEulerAngleX : 0,
-            roll: face.hasHeadEulerAngleZ ? face.headEulerAngleZ : 0,
-            leftEye: leftEye, rightEye: rightEye, smile: smile,
-            brightness: brightness, sharpness: sharpness, stableDurationMs: stableMs
+            yaw: yaw, pitch: pitch, roll: roll,
+            leftEye: leftEye, rightEye: rightEye, smile: smile, mouthOpenRatio: mouthRatio,
+            brightness: brightness, sharpness: sharpness, stableDurationMs: stableMs,
+            gestureProgress: gestureProgress,
+            centeringHorizontalOffset: centering.horizontalOffset,
+            centeringVerticalOffset: centering.verticalOffset,
+            centeringAvailable: centering.available,
+            centeringAccepted: centering.accepted
         )
     }
 
@@ -262,28 +385,95 @@ final class FaceCaptureViewController: UIViewController {
         stableFrames = 0
     }
 
+    private func startVerticalityMonitoring() {
+        guard options.requireDeviceVertical else { return }
+        guard motionManager.isDeviceMotionAvailable else {
+            deviceVerticalReady = true
+            return
+        }
+        deviceVerticalReady = false
+        deviceVerticalSince = 0
+        motionManager.deviceMotionUpdateInterval = 1.0 / 30.0
+        motionManager.startDeviceMotionUpdates(to: analysisQueue) { [weak self] motion, _ in
+            guard let self = self, let gravity = motion?.gravity else { return }
+            let tilt = atan2(hypot(gravity.x, gravity.z), abs(gravity.y)) * 180 / .pi
+            let limit = self.deviceVerticalReady
+                ? Self.deviceVerticalExitDegrees : Self.deviceVerticalEnterDegrees
+            let now = CACurrentMediaTime()
+            if tilt > limit {
+                self.deviceVerticalSince = 0
+                self.deviceVerticalReady = false
+            } else {
+                if self.deviceVerticalSince == 0 { self.deviceVerticalSince = now }
+                if now - self.deviceVerticalSince >= Self.deviceVerticalHold {
+                    self.deviceVerticalReady = true
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.overlayView?.updateDeviceTilt(tilt, ready: self?.deviceVerticalReady ?? false)
+            }
+        }
+    }
+
     private func emptyAnalysis(_ state: FaceCaptureState, _ brightness: CGFloat,
-                               _ sharpness: CGFloat) -> FaceCaptureAnalysis {
+                               _ sharpness: CGFloat,
+                               progress: FaceGestureProgress? = nil) -> FaceCaptureAnalysis {
         return FaceCaptureAnalysis(state: state, normalizedBounds: nil, yaw: 0, pitch: 0, roll: 0,
                                    leftEye: nil, rightEye: nil, smile: nil,
-                                   brightness: brightness, sharpness: sharpness, stableDurationMs: 0)
+                                   mouthOpenRatio: 0, brightness: brightness, sharpness: sharpness,
+                                   stableDurationMs: 0, gestureProgress: progress,
+                                   centeringHorizontalOffset: .nan,
+                                   centeringVerticalOffset: .nan,
+                                   centeringAvailable: false, centeringAccepted: false)
     }
 
     private func handle(_ analysis: FaceCaptureAnalysis, pixelBuffer: CVPixelBuffer) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, !self.completed, !self.capturing else { return }
-            self.overlayView.update(analysis, message: self.message(for: analysis.state))
-            if analysis.state == .ready { self.beginCapture(analysis, pixelBuffer: pixelBuffer) }
+            let candidateCapture = analysis.state == .gesture
+                && analysis.gestureProgress?.stage == .capture
+            // Ignore a frame queued while the tracker was paused for the candidate capture.
+            guard !(candidateCapture && self.pendingCandidate != nil) else { return }
+            self.overlayView.setProgressCompleted(self.progressCompleted(for: analysis))
+            if analysis.state == .ready && self.pendingCandidate == nil {
+                var waitingAnalysis = analysis
+                waitingAnalysis.state = .holdStill
+                self.overlayView.update(
+                    waitingAnalysis,
+                    message: self.options.localization.text("face_hold_still")
+                )
+            } else if analysis.state != .ready
+                && (!candidateCapture || self.options.revealCapture) {
+                let message = analysis.state == .gesture
+                    ? self.gestureMessage(analysis: analysis)
+                    : self.message(for: analysis.state)
+                self.overlayView.update(analysis, message: message)
+            }
+            if analysis.state == .gesture, let progress = analysis.gestureProgress {
+                if progress.stage == .retry {
+                    self.discardPendingCandidate()
+                } else if progress.stage == .capture {
+                    self.beginCapture(analysis, pixelBuffer: pixelBuffer, candidate: true)
+                }
+            } else if analysis.state == .ready {
+                if let pending = self.pendingCandidate { self.finish(pending) }
+                else { self.beginCapture(analysis, pixelBuffer: pixelBuffer, candidate: false) }
+            }
         }
     }
 
-    private func beginCapture(_ analysis: FaceCaptureAnalysis, pixelBuffer: CVPixelBuffer) {
+    private func beginCapture(_ analysis: FaceCaptureAnalysis, pixelBuffer: CVPixelBuffer,
+                              candidate: Bool) {
         guard !capturing, !completed else { return }
         capturing = true
-        var capturingAnalysis = analysis
-        capturingAnalysis.state = .capturing
-        overlayView.update(capturingAnalysis,
-                           message: options.localization.text("face_capturing"))
+        capturingCandidate = candidate
+        lastCaptureAnalysis = analysis
+        if options.revealCapture {
+            var capturingAnalysis = analysis
+            capturingAnalysis.state = .capturing
+            overlayView.update(capturingAnalysis,
+                               message: options.localization.text("face_capturing"))
+        }
         processingQueue.async { [weak self] in
             guard let self = self, !self.completed else { return }
             do {
@@ -292,7 +482,7 @@ final class FaceCaptureViewController: UIViewController {
                     analysis: analysis,
                     directory: self.cacheDirectory()
                 )
-                DispatchQueue.main.async { self.finish(result) }
+                DispatchQueue.main.async { self.handleCapturedResult(result) }
             } catch let error as MlKitSuiteError {
                 DispatchQueue.main.async {
                     switch error {
@@ -314,13 +504,41 @@ final class FaceCaptureViewController: UIViewController {
 
     private func retry(_ message: String) {
         guard !completed else { return }
+        if !options.gestures.isEmpty { gestureTracker.retry(now: CACurrentMediaTime()) }
+        discardPendingCandidate()
         resetStability()
+        overlayView.setProgressCompleted(0)
         overlayView.update(nil, message: message)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Double(options.retryMessageMs) / 1000
+        ) { [weak self] in
             guard let self = self, !self.completed else { return }
             self.capturing = false
+            self.capturingCandidate = false
             self.overlayView.update(nil,
                                     message: self.options.localization.text("face_searching"))
+        }
+    }
+
+    private func handleCapturedResult(_ result: FaceCaptureResult) {
+        if !capturingCandidate || options.gestures.isEmpty
+            || options.captureAfterGesture >= options.gestures.count {
+            finish(result)
+            return
+        }
+        discardPendingCandidate()
+        pendingCandidate = result
+        overlayView.setProgressCompleted(min(options.gestures.count + 2,
+                                             options.captureAfterGesture + 2))
+        gestureTracker.resumeAfterCapture()
+        capturing = false
+        capturingCandidate = false
+    }
+
+    private func discardPendingCandidate() {
+        if let candidate = pendingCandidate {
+            try? FileManager.default.removeItem(at: candidate.fileURL)
+            pendingCandidate = nil
         }
     }
 
@@ -343,6 +561,7 @@ final class FaceCaptureViewController: UIViewController {
 
     @objc private func cancelByUser() {
         guard !completed else { return }
+        discardPendingCandidate()
         completed = true
         timeoutItem?.cancel()
         delegate?.faceCaptureDidCancel(self)
@@ -350,6 +569,12 @@ final class FaceCaptureViewController: UIViewController {
 
     private func finish(_ result: FaceCaptureResult) {
         guard !completed else { return }
+        overlayView.setProgressCompleted(options.gestures.count + 2)
+        if var finalAnalysis = lastCaptureAnalysis {
+            finalAnalysis.state = .ready
+            overlayView.update(finalAnalysis, message: options.localization.text("face_ready"))
+        }
+        if pendingCandidate?.fileURL == result.fileURL { pendingCandidate = nil }
         completed = true
         timeoutItem?.cancel()
         if options.beepEnabled {
@@ -365,6 +590,7 @@ final class FaceCaptureViewController: UIViewController {
 
     private func fail(_ error: MlKitSuiteError) {
         guard !completed else { return }
+        discardPendingCandidate()
         completed = true
         timeoutItem?.cancel()
         delegate?.faceCapture(self, didFail: error)
@@ -383,9 +609,81 @@ final class FaceCaptureViewController: UIViewController {
         case .improveLighting: return options.localization.text("face_more_light")
         case .reduceLighting: return options.localization.text("face_less_light")
         case .holdStill: return options.localization.text("face_hold_still")
+        case .deviceTilted: return options.localization.text("face_device_vertical")
+        case .gesture: return gestureMessage(analysis: nil)
         case .ready: return options.localization.text("face_ready")
         case .capturing: return options.localization.text("face_capturing")
         }
+    }
+
+    private func gestureMessage(analysis: FaceCaptureAnalysis?) -> String {
+        let progress = analysis?.gestureProgress ?? gestureTracker.progress
+        if progress.stage == .retry {
+            return options.localization.text("face_gesture_retry")
+        }
+        if progress.stage == .capture {
+            return options.localization.text("face_gesture_capture_candidate")
+        }
+        guard progress.stage != .complete, let gesture = progress.gesture else {
+            return options.localization.text("face_gestures_complete")
+        }
+        let action: String
+        switch progress.stage {
+        case .waitingNeutral:
+            if let pitch = analysis?.pitch, pitch > 11 {
+                action = options.localization.text("face_lower_head")
+            } else if let pitch = analysis?.pitch, pitch < -11 {
+                action = options.localization.text("face_raise_head")
+            } else {
+                action = options.localization.text("face_gesture_prepare")
+            }
+        case .returnNeutral: action = options.localization.text("face_gesture_return")
+        case .perform:
+            let phase = progress.debug?.phase ?? 0
+            if gesture == .nod {
+                action = options.localization.text(
+                    phase == 0 ? "face_gesture_nod_up" : "face_gesture_nod_down"
+                )
+            } else if gesture == .shake {
+                action = options.localization.text(
+                    phase == 0 ? "face_gesture_shake_right" : "face_gesture_shake_left"
+                )
+            } else {
+                action = options.localization.text("face_gesture_" + gesture.rawValue.lowercased())
+            }
+        case .capture, .retry, .complete:
+            action = options.localization.text("face_gestures_complete")
+        }
+        return action
+    }
+
+    private func progressCompleted(for analysis: FaceCaptureAnalysis) -> Int {
+        let total = options.gestures.count + 2
+        if options.gestures.isEmpty {
+            return analysis.state == .ready || analysis.state == .capturing ? 1 : 0
+        }
+        guard let progress = analysis.gestureProgress, progress.stage != .retry else { return 0 }
+        let faceAccepted = !(progress.index == 0 && progress.stage == .waitingNeutral)
+        var gesturesCompleted = progress.index
+        if progress.stage == .returnNeutral {
+            gesturesCompleted += 1
+        } else if progress.stage == .complete {
+            gesturesCompleted = progress.count
+        }
+        let captureCompleted = pendingCandidate == nil ? 0 : 1
+        return min(total, (faceAccepted ? 1 : 0) + gesturesCompleted + captureCompleted)
+    }
+
+    private func mouthOpenRatio(_ face: Face) -> CGFloat {
+        guard face.frame.height > 0,
+              let upper = face.contour(ofType: .upperLipBottom),
+              let lower = face.contour(ofType: .lowerLipTop),
+              !upper.points.isEmpty, !lower.points.isEmpty else { return 0 }
+        let upperY = upper.points.reduce(CGFloat(0)) { $0 + CGFloat($1.y) }
+            / CGFloat(upper.points.count)
+        let lowerY = lower.points.reduce(CGFloat(0)) { $0 + CGFloat($1.y) }
+            / CGFloat(lower.points.count)
+        return abs(lowerY - upperY) / face.frame.height
     }
 
     private func imageQuality(_ buffer: CVPixelBuffer) -> (CGFloat, CGFloat) {
@@ -428,7 +726,9 @@ extension FaceCaptureViewController: AVCaptureVideoDataOutputSampleBufferDelegat
         // connection has videoOrientation = .portrait. Only apply the sensor-to-
         // portrait transform when the delivered buffer is still landscape.
         image.orientation = bufferHeight >= bufferWidth ? .up : .leftMirrored
-        let imageSize = CGSize(width: bufferWidth, height: bufferHeight)
+        let imageSize = bufferHeight >= bufferWidth
+            ? CGSize(width: bufferWidth, height: bufferHeight)
+            : CGSize(width: bufferHeight, height: bufferWidth)
         liveDetector.process(image) { [weak self] faces, error in
             guard let self = self else { return }
             self.analysisQueue.async {

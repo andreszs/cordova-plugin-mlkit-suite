@@ -3,7 +3,7 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:tools="http://schemas.android.com/tools"
         id="cordova-plugin-mlkit-suite"
-        version="0.2.2">
+        version="0.3.0">
     <name>ML Kit Suite</name>
     <description>Google ML Kit vision suite for Apache Cordova on Android and iOS with barcode scanning, face capture, OCR, document scanning, image labeling, and segmentation.</description>
     <author href="https://github.com/andreszs">Andres Zs</author>
@@ -88,6 +88,7 @@
         <source-file src="src/android/java/MlKitSuitePlugin.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureActivity.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureConfig.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
+        <source-file src="src/android/java/FaceCentering.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceCaptureModels.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceFrameAnalyzer.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/FaceOverlayView.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
@@ -134,6 +135,7 @@
         <resource-file src="src/ios/MlKitSuiteResources.bundle" target="MlKitSuiteResources.bundle" />
 
         <framework src="AVFoundation.framework" />
+        <framework src="CoreMotion.framework" />
         <framework src="CoreImage.framework" />
         <framework src="WebKit.framework" />
 
