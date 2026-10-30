@@ -22,6 +22,14 @@ final class FaceCaptureViewController: UIViewController {
     private let sessionQueue = DispatchQueue(label: "com.andreszs.mlkitsuite.session")
     private let analysisQueue = DispatchQueue(label: "com.andreszs.mlkitsuite.analysis", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.andreszs.mlkitsuite.processing", qos: .userInitiated)
+    private lazy var motionQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.andreszs.mlkitsuite.motion"
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .userInitiated
+        queue.underlyingQueue = analysisQueue
+        return queue
+    }()
     private let liveDetector: FaceDetector
     private let stillProcessor: FaceStillProcessor
     private let gestureTracker: FaceGestureTracker
@@ -394,7 +402,7 @@ final class FaceCaptureViewController: UIViewController {
         deviceVerticalReady = false
         deviceVerticalSince = 0
         motionManager.deviceMotionUpdateInterval = 1.0 / 30.0
-        motionManager.startDeviceMotionUpdates(to: analysisQueue) { [weak self] motion, _ in
+        motionManager.startDeviceMotionUpdates(to: motionQueue) { [weak self] motion, _ in
             guard let self = self, let gravity = motion?.gravity else { return }
             let tilt = atan2(hypot(gravity.x, gravity.z), abs(gravity.y)) * 180 / .pi
             let limit = self.deviceVerticalReady
