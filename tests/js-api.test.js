@@ -23,6 +23,7 @@ Module.prototype.require = function (name) {
 };
 
 var MlKit = require('../www/MlKit');
+assert.strictEqual(typeof MlKit.segmentSelfie, 'undefined');
 
 Promise.resolve()
     .then(function () { return MlKit.getCapabilities(); })
@@ -60,19 +61,9 @@ Promise.resolve()
         return MlKit.labelImage('/cache/photo.jpg', { confidenceThreshold: 0.6 });
     })
     .then(function () {
-        return MlKit.segmentSelfie('/cache/selfie.jpg', { maxDimension: 1600 });
-    })
-    .then(function () {
         return MlKit.segmentSubjects('/cache/subjects.jpg', {
             maxDimension: 1600,
             moduleLoadingMessage: 'Preparing subject segmentation…'
-        });
-    })
-    .then(function () {
-        return MlKit.segmentSelfie('/cache/selfie.jpg', { maxDimension: 128 }).then(function () {
-            throw new Error('Expected an invalid maximum dimension to reject.');
-        }, function (error) {
-            assert.strictEqual(error.code, 'INVALID_ARGUMENT');
         });
     })
     .then(function () {
@@ -151,9 +142,6 @@ Promise.resolve()
             { service: 'MlKitSuite', action: 'scanBarcodes', args: ['/cache/page-2.jpg', { formats: ['PDF_417'] }] },
             { service: 'MlKitSuite', action: 'labelImage', args: [
                 '/cache/photo.jpg', { confidenceThreshold: 0.6 }
-            ] },
-            { service: 'MlKitSuite', action: 'segmentSelfie', args: [
-                '/cache/selfie.jpg', { maxDimension: 1600 }
             ] },
             { service: 'MlKitSuite', action: 'segmentSubjects', args: [
                 '/cache/subjects.jpg', {

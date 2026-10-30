@@ -2,7 +2,6 @@ import AVFoundation
 import Foundation
 import MLKitBarcodeScanning
 import MLKitImageLabeling
-import MLKitSegmentationSelfie
 import MLKitVision
 import UIKit
 import WebKit
@@ -68,14 +67,6 @@ final class MlKitSuitePlugin: CDVPlugin {
                 "modelStatus": "bundled",
                 "defaultModel": true,
                 "labels": "400+"
-            ],
-            "selfieSegmentation": [
-                "segment": true,
-                "mode": "bundled",
-                "bundled": true,
-                "ready": true,
-                "modelStatus": "bundled",
-                "output": "transparent-png"
             ],
             "subjectSegmentation": [
                 "segment": false,
@@ -168,94 +159,6 @@ final class MlKitSuitePlugin: CDVPlugin {
                         CDVPluginResult(status: CDVCommandStatus.ok, messageAs: payload),
                         callbackId: command.callbackId
                     )
-                }
-            } catch {
-                self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
-                               message: localization.text("image_open_failed"), recoverable: false)
-            }
-        })
-    }
-
-    @objc(segmentSelfie:)
-    func segmentSelfie(_ command: CDVInvokedUrlCommand) {
-        let dictionary = command.argument(at: 1) as? [String: Any] ?? [:]
-        let localization: MlKitLocalization
-        do {
-            localization = try MlKitLocalization(dictionary: dictionary)
-            for key in dictionary.keys where key != "maxDimension"
-                && key != "moduleLoadingMessage" && key != "locale" {
-                throw MlKitSuiteError.invalidArgument(
-                    "Unknown selfie segmentation option: \(key)."
-                )
-            }
-        } catch let error as MlKitSuiteError {
-            sendErrorPayload(callbackId: command.callbackId, payload: error.payload)
-            return
-        } catch {
-            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
-                      message: error.localizedDescription, recoverable: false)
-            return
-        }
-        guard let rawPath = command.argument(at: 0) as? String,
-              !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
-                      message: "imagePath must be a non-empty string.", recoverable: false)
-            return
-        }
-        let maxDimension: Int
-        if let rawValue = dictionary["maxDimension"] {
-            guard let number = rawValue as? NSNumber,
-                  CFGetTypeID(number) != CFBooleanGetTypeID(),
-                  number.doubleValue.rounded() == number.doubleValue,
-                  (256...4096).contains(number.intValue) else {
-                sendError(callbackId: command.callbackId, code: "INVALID_ARGUMENT",
-                          message: "maxDimension must be an integer from 256 to 4096.",
-                          recoverable: false)
-                return
-            }
-            maxDimension = number.intValue
-        } else {
-            maxDimension = 2048
-        }
-
-        commandDelegate.run(inBackground: { [weak self] in
-            guard let self = self else { return }
-            do {
-                let image = try self.decodedImage(rawPath)
-                let processor = SelfieSegmentationProcessor()
-                processor.process(
-                    image,
-                    maxDimension: maxDimension,
-                    outputDirectory: try self.cacheDirectory()
-                ) { result in
-                    switch result {
-                    case .success(let value):
-                        let attributes = try? FileManager.default.attributesOfItem(
-                            atPath: value.fileURL.path
-                        )
-                        let bytes = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
-                        self.commandDelegate.send(
-                            CDVPluginResult(status: CDVCommandStatus.ok, messageAs: [
-                                "status": "success",
-                                "imageUri": self.imageWebURL(
-                                    fileName: value.fileURL.lastPathComponent
-                                ),
-                                "imagePath": value.fileURL.path,
-                                "width": value.width,
-                                "height": value.height,
-                                "mimeType": "image/png",
-                                "bytes": bytes
-                            ]),
-                            callbackId: command.callbackId
-                        )
-                    case .failure:
-                        self.sendError(
-                            callbackId: command.callbackId,
-                            code: "PROCESSING_FAILED",
-                            message: localization.text("selfie_segmentation_failed"),
-                            recoverable: true
-                        )
-                    }
                 }
             } catch {
                 self.sendError(callbackId: command.callbackId, code: "INVALID_IMAGE",
@@ -673,7 +576,7 @@ final class MlKitSuitePlugin: CDVPlugin {
         guard path.hasPrefix(Self.imagePathPrefix) else { return false }
         let fileName = String(path.dropFirst(Self.imagePathPrefix.count))
         let expression = try? NSRegularExpression(
-            pattern: "^(face-[0-9a-fA-F-]+\\.jpg|selfie-[0-9a-fA-F-]+\\.png)$"
+            pattern: "^face-[0-9a-fA-F-]+\\.jpg$"
         )
         let range = NSRange(fileName.startIndex..<fileName.endIndex, in: fileName)
         guard expression?.firstMatch(in: fileName, range: range) != nil else {

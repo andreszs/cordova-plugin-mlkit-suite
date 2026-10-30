@@ -110,7 +110,6 @@
     <string name="mlkit_suite_text_recognition_failed">Unable to recognize text in the image.</string>
     <string name="mlkit_suite_barcode_image_failed">Unable to scan barcodes in the image.</string>
     <string name="mlkit_suite_image_labeling_failed">Unable to label the image.</string>
-    <string name="mlkit_suite_selfie_segmentation_failed">Unable to segment the person in the image.</string>
     <string name="mlkit_suite_subject_segmentation_failed">Unable to segment the subjects in the image.</string>
     <string name="mlkit_suite_subject_check_failed">Unable to check the Subject Segmentation module.</string>
     <string name="mlkit_suite_subject_download_cancelled">Subject Segmentation module download was cancelled.</string>

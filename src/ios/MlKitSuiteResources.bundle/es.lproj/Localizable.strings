@@ -107,7 +107,6 @@
 "text_recognition_failed" = "No se pudo reconocer texto en la imagen.";
 "barcode_image_failed" = "No se pudieron detectar códigos en la imagen.";
 "image_labeling_failed" = "No se pudo clasificar la imagen.";
-"selfie_segmentation_failed" = "No se pudo segmentar la persona en la imagen.";
 "camera_permission_denied" = "Se denegó el permiso de cámara.";
 "camera_permission_unknown" = "No se pudo determinar el permiso de cámara.";
 "view_controller_unavailable" = "El controlador de vista de la aplicación no está disponible.";

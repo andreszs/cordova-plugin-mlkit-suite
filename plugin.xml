@@ -3,12 +3,12 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:tools="http://schemas.android.com/tools"
         id="cordova-plugin-mlkit-suite"
-        version="0.3.0">
+        version="0.4.0">
     <name>ML Kit Suite</name>
     <description>Google ML Kit vision suite for Apache Cordova on Android and iOS with barcode scanning, face capture, OCR, document scanning, image labeling, and segmentation.</description>
     <author href="https://github.com/andreszs">Andres Zs</author>
     <license>MIT</license>
-    <keywords>cordova,apache-cordova,cordova-plugin,android,ios,mlkit,ml-kit,google-ml-kit,computer-vision,mobile-vision,on-device-ml,document-scanner,document-scanning,text-recognition,optical-character-recognition,ocr,face-detection,face-capture,barcode-scanning,barcode-scanner,image-labeling,selfie-segmentation,subject-segmentation,image-segmentation,background-removal,pdf417,qr-code,camera,camerax,avfoundation</keywords>
+    <keywords>cordova,cordova-plugin,android,ios,mlkit,google-ml-kit,computer-vision,face-detection,barcode-scanner,document-scanner,text-recognition,image-labeling,subject-segmentation</keywords>
     <repo>https://github.com/andreszs/cordova-plugin-mlkit-suite.git</repo>
     <issue>https://github.com/andreszs/cordova-plugin-mlkit-suite/issues</issue>
 
@@ -106,7 +106,6 @@
         <source-file src="src/android/java/MlKitModelsModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/MlKitLoadingDialog.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/StaticImageProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
-        <source-file src="src/android/java/SelfieSegmentationProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/SubjectSegmentationModuleInstaller.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
         <source-file src="src/android/java/SubjectSegmentationProcessor.java" target-dir="app/src/main/java/com/andreszs/plugins/mlkitsuite" />
     </platform>
@@ -129,7 +128,6 @@
         <source-file src="src/ios/BarcodeOverlayView.swift" />
         <source-file src="src/ios/BarcodeScanViewController.swift" />
         <source-file src="src/ios/TextRecognitionProcessor.swift" />
-        <source-file src="src/ios/SelfieSegmentationProcessor.swift" />
         <source-file src="src/ios/MlKitSuitePlugin.swift" />
         <resource-file src="src/ios/MlKitSuitePrivacy.bundle" target="MlKitSuitePrivacy.bundle" />
         <resource-file src="src/ios/MlKitSuiteResources.bundle" target="MlKitSuiteResources.bundle" />
@@ -148,7 +146,6 @@
                 <pod name="GoogleMLKit/TextRecognition" spec="8.0.0" />
                 <pod name="GoogleMLKit/BarcodeScanning" spec="8.0.0" />
                 <pod name="GoogleMLKit/ImageLabeling" spec="8.0.0" />
-                <pod name="GoogleMLKit/SegmentationSelfie" spec="8.0.0" />
             </pods>
         </podspec>
     </platform>

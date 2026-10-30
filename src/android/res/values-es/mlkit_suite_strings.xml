@@ -110,7 +110,6 @@
     <string name="mlkit_suite_text_recognition_failed">No se pudo reconocer texto en la imagen.</string>
     <string name="mlkit_suite_barcode_image_failed">No se pudieron detectar códigos en la imagen.</string>
     <string name="mlkit_suite_image_labeling_failed">No se pudo clasificar la imagen.</string>
-    <string name="mlkit_suite_selfie_segmentation_failed">No se pudo segmentar la persona en la imagen.</string>
     <string name="mlkit_suite_subject_segmentation_failed">No se pudieron segmentar los sujetos de la imagen.</string>
     <string name="mlkit_suite_subject_check_failed">No se pudo verificar el módulo de segmentación de sujetos.</string>
     <string name="mlkit_suite_subject_download_cancelled">Se canceló la descarga del módulo de segmentación de sujetos.</string>

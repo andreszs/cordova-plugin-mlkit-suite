@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+- Removed Selfie Segmentation from Android, iOS, and the JavaScript API. ML Kit offers this module only as a bundled dependency; measured against the Android universal debug APK, removing it reduced the application by 77.84 MB (74.23 MiB), from 84.81 MB to 6.97 MB, primarily by eliminating four ABI variants of `libxeno_native.so` and the bundled model.
+
 ## 0.3.0 - 2026-10-29
 
 ### Face capture

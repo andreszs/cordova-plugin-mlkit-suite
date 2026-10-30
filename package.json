@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-mlkit-suite",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Google ML Kit vision suite for Apache Cordova on Android and iOS with barcode scanning, face capture, OCR, document scanning, image labeling, and segmentation.",
   "license": "MIT",
   "author": "Andres Zs",
@@ -14,38 +14,18 @@
   },
   "keywords": [
     "cordova",
-    "apache-cordova",
     "cordova-plugin",
     "android",
     "ios",
     "mlkit",
-    "ml-kit",
     "google-ml-kit",
     "computer-vision",
-    "mobile-vision",
-    "on-device-ml",
     "face-detection",
-    "face-capture",
-    "barcode-scanning",
     "barcode-scanner",
     "document-scanner",
-    "document-scanning",
     "text-recognition",
-    "optical-character-recognition",
-    "ocr",
     "image-labeling",
-    "selfie-segmentation",
-    "subject-segmentation",
-    "image-segmentation",
-    "background-removal",
-    "pdf417",
-    "qr-code",
-    "camera",
-    "camerax",
-    "avfoundation",
-    "ecosystem:cordova",
-    "cordova-android",
-    "cordova-ios"
+    "subject-segmentation"
   ],
   "cordova": {
     "id": "cordova-plugin-mlkit-suite",
@@ -75,7 +55,7 @@
     "provenance": true
   },
   "scripts": {
-    "test": "node tests/js-api.test.js && node tests/java-confirmation.test.js && node tests/ios-live-barcode.test.js && node tests/ios-static-text.test.js && node tests/ios-image-labeling.test.js && node tests/ios-selfie-segmentation.test.js && node tests/ios-face-capture.test.js && node tests/localization.test.js"
+    "test": "node tests/js-api.test.js && node tests/java-confirmation.test.js && node tests/ios-live-barcode.test.js && node tests/ios-static-text.test.js && node tests/ios-image-labeling.test.js && node tests/ios-face-capture.test.js && node tests/localization.test.js"
   }
 }
 
