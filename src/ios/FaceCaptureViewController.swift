@@ -654,7 +654,7 @@ final class FaceCaptureViewController: UIViewController {
                 )
             } else if gesture == .shake {
                 action = options.localization.text(
-                    phase == 0 ? "face_gesture_shake_right" : "face_gesture_shake_left"
+                    phase == 0 ? "face_gesture_shake_left" : "face_gesture_shake_right"
                 )
             } else {
                 action = options.localization.text("face_gesture_" + gesture.rawValue.lowercased())

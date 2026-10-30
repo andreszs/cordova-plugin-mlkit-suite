@@ -44,6 +44,12 @@ assert(controller.includes('queue.maxConcurrentOperationCount = 1'));
 assert(controller.includes('queue.underlyingQueue = analysisQueue'));
 assert(controller.includes('motionManager.startDeviceMotionUpdates(to: motionQueue)'));
 assert(!controller.includes('motionManager.startDeviceMotionUpdates(to: analysisQueue)'));
+assert(controller.includes(
+    'phase == 0 ? "face_gesture_shake_left" : "face_gesture_shake_right"'
+));
+assert(!controller.includes(
+    'phase == 0 ? "face_gesture_shake_right" : "face_gesture_shake_left"'
+));
 assert(controller.includes('return emptyAnalysis(.deviceTilted'));
 assert(controller.includes('options.localization.text("face_lower_head")'));
 assert(controller.includes('options.localization.text("face_raise_head")'));
