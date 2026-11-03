@@ -487,8 +487,8 @@ face returns within that margin; a longer interruption restarts the complete seq
     <th>Settings</th>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/image-labeling.png" alt="Image labeling workflow in the Android demo" width="320"></td>
-    <td><img src="docs/screenshots/image-labeling-settings.png" alt="Image labeling settings in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/image-labeling.jpg" alt="Image labeling input and detected labels in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/image-labeling-settings.jpg" alt="Image labeling confidence threshold setting in the Android demo" width="320"></td>
   </tr>
 </table>
 
@@ -521,8 +521,8 @@ for (const label of labels) {
     <th>Settings</th>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/subject-segmentation.png" alt="Subject segmentation workflow in the Android demo" width="320"></td>
-    <td><img src="docs/screenshots/subject-segmentation-settings.png" alt="Subject segmentation settings in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/subject-segmentation.jpg" alt="Subject segmentation input and transparent PNG result in the Android demo" width="320"></td>
+    <td><img src="docs/screenshots/subject-segmentation-settings.jpg" alt="Subject segmentation maximum output dimension setting in the Android demo" width="320"></td>
   </tr>
 </table>
 
