@@ -15,17 +15,14 @@
   "keywords": [
     "cordova",
     "cordova-plugin",
-    "android",
-    "ios",
     "mlkit",
     "google-ml-kit",
-    "computer-vision",
-    "face-detection",
+    "android",
+    "ios",
     "barcode-scanner",
-    "document-scanner",
+    "face-detection",
     "text-recognition",
-    "image-labeling",
-    "subject-segmentation"
+    "document-scanner"
   ],
   "cordova": {
     "id": "cordova-plugin-mlkit-suite",
