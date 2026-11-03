@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 2026-11-03
+
+- Centered the Android Face Capture oval exactly within the usable portrait viewport while accounting for system bars and display cutouts across Android 7/API 24 and newer.
+- Centered the instruction and progress indicator within the remaining spaces above and below the oval, and kept face-position validation synchronized with the displayed guide after inset or viewport changes.
+- Locked the Android Face Capture activity to portrait orientation.
+
 ## 0.4.0 - 2026-10-30
 
 - Removed Selfie Segmentation from Android, iOS, and the JavaScript API. ML Kit offers this module only as a bundled dependency; measured against the Android universal debug APK, removing it reduced the application by 77.84 MB (74.23 MiB), from 84.81 MB to 6.97 MB, primarily by eliminating four ABI variants of `libxeno_native.so` and the bundled model.

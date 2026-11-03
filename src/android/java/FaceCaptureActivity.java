@@ -169,6 +169,7 @@ public final class FaceCaptureActivity extends Activity
             config.localization.text("face_searching"), config.gestures.size() + 2,
             config.captureAfterGesture, config.checks, !config.gestures.isEmpty(),
             config.requireDeviceVertical && verticalitySensor != null);
+        overlayView.setGeometryChangedListener(this::updateAnalyzerGeometry);
         root.addView(overlayView, matchParent());
 
         if (config.showCloseButton) {

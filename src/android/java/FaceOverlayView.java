@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.os.Build;
 import android.os.SystemClock;
 import android.text.Layout;
 import android.text.Spannable;
@@ -16,6 +17,7 @@ import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.WindowInsets;
 
 final class FaceOverlayView extends View {
     private static final long PROGRESS_TRANSITION_MS = 260L;
@@ -40,6 +42,9 @@ final class FaceOverlayView extends View {
     private int[] progressStartColors;
     private int[] progressTargetColors;
     private long[] progressTransitionStartedAt;
+    private int systemInsetTop;
+    private int systemInsetBottom;
+    private Runnable geometryChangedListener;
 
     FaceOverlayView(Context context, MlKitLocalization localization,
                     boolean debugMode, String initialMessage,
@@ -87,13 +92,46 @@ final class FaceOverlayView extends View {
         return calculateGuide(getWidth(), getHeight());
     }
 
+    void setGeometryChangedListener(Runnable listener) {
+        geometryChangedListener = listener;
+    }
+
+    @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        WindowInsets result = super.onApplyWindowInsets(insets);
+        int top;
+        int bottom;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            android.graphics.Insets safe = insets.getInsets(
+                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            top = safe.top;
+            bottom = safe.bottom;
+        } else {
+            top = insets.getSystemWindowInsetTop();
+            bottom = insets.getSystemWindowInsetBottom();
+        }
+        if (top != systemInsetTop || bottom != systemInsetBottom) {
+            systemInsetTop = top;
+            systemInsetBottom = bottom;
+            invalidate();
+            notifyGeometryChanged();
+        }
+        return result;
+    }
+
+    @Override
+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        if (width != oldWidth || height != oldHeight) notifyGeometryChanged();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float width = getWidth();
         float height = getHeight();
         boolean detailedGestureDebug = debugMode && hasGestures;
-        float debugBottom = height - dp(8);
+        float debugBottom = contentBottom(height) - dp(8);
         float debugHeight = !debugMode ? 0 : detailedGestureDebug
             ? Math.min(dp(82), height * 0.15f)
             : Math.min(dp(52), height * 0.09f);
@@ -121,11 +159,12 @@ final class FaceOverlayView extends View {
         paint.setColor(ovalColor);
         canvas.drawOval(guide, paint);
 
-        float messageTop = dp(64);
-        float messageBottom = guide.top - dp(36);
-        drawCenteredText(canvas, message, (messageTop + messageBottom) / 2f, dp(18),
+        float messageTop = contentTop() + dp(52);
+        float messageBottom = guide.top - dp(24);
+        drawCenteredText(canvas, message, (contentTop() + guide.top) / 2f, dp(18),
             messageColor, dp(24), width - dp(24), messageTop, messageBottom, 3);
-        drawProgress(canvas, width, guide.bottom + dp(18));
+        float progressAreaBottom = debugMode ? debugTop - dp(8) : contentBottom(height);
+        drawProgress(canvas, width, (guide.bottom + progressAreaBottom) / 2f);
 
         if (debugMode && analysis != null) {
             FaceCaptureModels.GestureProgress progress = analysis.gestureProgress;
@@ -142,21 +181,41 @@ final class FaceOverlayView extends View {
 
     private RectF calculateGuide(float width, float height) {
         if (width <= 0f || height <= 0f) return new RectF();
-        boolean detailedGestureDebug = debugMode && hasGestures;
-        float debugBottom = height - dp(8);
-        float debugHeight = !debugMode ? 0 : detailedGestureDebug
+        float contentTop = contentTop();
+        float contentBottom = contentBottom(height);
+        float centerY = (contentTop + contentBottom) / 2f;
+        float debugTop = debugTop(height);
+        float lowerBoundary = debugMode ? debugTop - dp(8) : contentBottom;
+        float reservedSideSpace = dp(72);
+        float upperHalf = centerY - contentTop - reservedSideSpace;
+        float lowerHalf = lowerBoundary - centerY - reservedSideSpace;
+        float maxGuideHeight = Math.max(1, 2f * Math.min(upperHalf, lowerHalf));
+        float guideWidth = Math.min(width * 0.78f, maxGuideHeight / 1.28f);
+        float guideHeight = guideWidth * 1.28f;
+        return new RectF(width / 2f - guideWidth / 2f, centerY - guideHeight / 2f,
+            width / 2f + guideWidth / 2f, centerY + guideHeight / 2f);
+    }
+
+    private float contentTop() {
+        return systemInsetTop;
+    }
+
+    private float contentBottom(float height) {
+        return Math.max(contentTop() + 1, height - systemInsetBottom);
+    }
+
+    private float debugTop(float height) {
+        if (!debugMode) return contentBottom(height);
+        boolean detailedGestureDebug = hasGestures;
+        float debugBottom = contentBottom(height) - dp(8);
+        float debugHeight = detailedGestureDebug
             ? Math.min(dp(82), height * 0.15f)
             : Math.min(dp(52), height * 0.09f);
-        float debugTop = debugBottom - debugHeight;
-        float progressBottom = debugMode ? debugTop - dp(8) : height - dp(20);
-        float guideTopLimit = Math.min(dp(160), height * 0.28f);
-        float guideBottomLimit = progressBottom - dp(30);
-        float availableGuideHeight = Math.max(1, guideBottomLimit - guideTopLimit);
-        float guideWidth = Math.min(width * 0.78f, availableGuideHeight / 1.28f);
-        float guideHeight = guideWidth * 1.28f;
-        float guideTop = guideTopLimit + Math.max(0, availableGuideHeight - guideHeight) * 0.65f;
-        return new RectF(width / 2f - guideWidth / 2f, guideTop,
-            width / 2f + guideWidth / 2f, guideTop + guideHeight);
+        return debugBottom - debugHeight;
+    }
+
+    private void notifyGeometryChanged() {
+        if (geometryChangedListener != null) post(geometryChangedListener);
     }
 
     private void drawCenteredText(Canvas canvas, CharSequence text, float centerY, float size, int color,
