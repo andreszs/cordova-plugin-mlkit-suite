@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 - 2026-11-26
+
+### Face capture gestures (iOS)
+
+- Ported the 0.5.0 Android liveness gesture detection to iOS, with the same constants and behavior: smoothed head pose (exponential moving average), hysteresis on every gesture, bidirectional `NOD` / `SHAKE` measured as a swing, `LOOK_UP` / `LOOK_DOWN` at 12° / 10°, two-frame blinks, gesture-specific arming neutral, a baseline averaged over the neutral frames, and a capture neutral that enforces the still validator's absolute pose limits when `checks.pose` is enabled.
+- Accepting the first half of `NOD` / `SHAKE` no longer pauses detection; the instruction now starts generic and then asks for the missing direction.
+- Device verticality now uses 10° / 16° enter/exit hysteresis with a 0.4 s hold. A gesture in progress is only restarted beyond 28° of tilt, while the photo still waits for an upright device, and the return-to-neutral prompt asks to hold the device upright or raise/lower the head when needed.
+- Increased the active-gesture face-loss tolerance from 300 ms to 700 ms.
+- Added the `face_gesture_nod_up_now` and `face_gesture_shake_right_now` iOS strings.
+
 ## 0.5.0 - 2026-11-26
 
 ### Face capture gestures (Android)
