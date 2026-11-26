@@ -611,9 +611,9 @@ struct FaceCaptureOptions {
             "captureAfterGesture", fallback: gestures.count,
             minimum: gestures.isEmpty ? 0 : 1, maximum: gestures.count
         )
-        gestureTimeoutMs = try integer("gestureTimeoutMs", fallback: 4000,
+        gestureTimeoutMs = try integer("gestureTimeoutMs", fallback: 6000,
                                        minimum: 1000, maximum: 15_000)
-        neutralTimeoutMs = try integer("neutralTimeoutMs", fallback: 2000,
+        neutralTimeoutMs = try integer("neutralTimeoutMs", fallback: 3000,
                                        minimum: 500, maximum: 5000)
         retryMessageMs = try integer("retryMessageMs", fallback: 1000,
                                      minimum: 250, maximum: 3000)

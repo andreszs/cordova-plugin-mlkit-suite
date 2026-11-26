@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.5.0 - 2026-11-26
+
+### Face capture gestures (Android)
+
+- Reworked liveness gesture detection so natural movements are accepted on the first attempt: head pose is smoothed with a moving average, and every gesture uses hysteresis (a stricter threshold to start a hold and a looser one to keep it), so a single noisy ML Kit frame no longer resets progress.
+- `NOD` and `SHAKE` now accept either direction first and are measured as a swing (8° / 12° to one side, then across neutral with about 14° / 20° of total travel). Accepting the first half no longer pauses detection for 500 ms, and the instruction switches to the missing direction.
+- Lowered `LOOK_UP` / `LOOK_DOWN` thresholds to 12° / 10° and accepted deliberate blinks after two consecutive frames.
+- The neutral pose before a gesture now only checks the state that gesture needs (for example, head gestures no longer require open eyes or a neutral expression), and its baseline is the average of the neutral frames.
+- The neutral pose before the photo now enforces the same absolute pose limits as the final still validation, preventing a successful gesture from being followed by a late "look straight" retry; the overlay guides the user to raise or lower the head while returning.
+- Device verticality now uses 10° / 16° enter/exit hysteresis. A gesture in progress is only restarted beyond 28° of tilt, while the photo still waits for an upright device.
+- Increased the active-gesture face-loss tolerance from 300 ms to 700 ms.
+
+### Defaults
+
+- Increased the default `gestureTimeoutMs` from 4000 to 6000 and `neutralTimeoutMs` from 2000 to 3000 on Android and iOS.
+
+### Performance and reliability (Android)
+
+- Face analysis runs at 480×640 instead of 1280×720, roughly halving ML Kit latency and sampling head movements more often.
+- ML Kit results and still-photo cropping, quality analysis, and JPEG encoding run off the UI thread; late callbacks after the activity closes are dropped safely.
+- Still photos are decoded with power-of-two subsampling instead of at full sensor resolution, reducing capture memory and processing time.
+- The live analyzer can no longer remain stuck holding a camera frame if ML Kit rejects an input.
+
+### Tests
+
+- Added plain-Java unit tests for the face gesture tracker covering bidirectional `NOD`, continuous `SHAKE`, noise tolerance, jitter rejection, capture pose gating, device tilt gating, `BLINK`, and `SMILE`.
+
 ## 0.4.1 - 2026-11-03
 
 - Centered the Android Face Capture oval exactly within the usable portrait viewport while accounting for system bars and display cutouts across Android 7/API 24 and newer.

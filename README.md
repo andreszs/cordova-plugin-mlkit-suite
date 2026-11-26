@@ -396,8 +396,8 @@ All checks except `eyesOpen` and `neutralExpression` are enabled by default. Cap
 | `locale` | `string` | `"auto"` | Plugin UI/error locale (`en`, `es`, or BCP-47). |
 | `gestures` | `string[]` | `[]` | Ordered challenge sequence, with at most five gestures. Each gesture is armed only after the face remains frontal and neutral for a stability pause, and then ends in a neutral pose. |
 | `captureAfterGesture` | `integer` | gesture count | Captures after this many completed gestures. Use `1` with two gestures to keep the candidate private until the second gesture succeeds. |
-| `gestureTimeoutMs` | `integer 1000–15000` | `4000` | Maximum time to complete each armed gesture. |
-| `neutralTimeoutMs` | `integer 500–5000` | `2000` | Maximum time to return to neutral after a gesture. |
+| `gestureTimeoutMs` | `integer 1000–15000` | `6000` | Maximum time to complete each armed gesture. |
+| `neutralTimeoutMs` | `integer 500–5000` | `3000` | Maximum time to return to neutral after a gesture. |
 | `retryMessageMs` | `integer 250–3000` | `1000` | Time the restart message remains visible before the whole sequence resets. |
 | `checks` | `object \| null` | see below | Enables or disables individual capture gates. |
 | `timeoutMs` | integer `0–600000` | `90000` | Face-capture timeout in milliseconds (90 seconds by default). `0` disables it. |
