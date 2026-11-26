@@ -43,14 +43,18 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public final class FaceCaptureActivity extends Activity
     implements LifecycleOwner, FaceFrameAnalyzer.Listener, SensorEventListener {
 
     private static final long SUCCESS_BEEP_DELAY_MS = 250L;
-    private static final long DEVICE_VERTICAL_HOLD_MS = 700L;
+    private static final long DEVICE_VERTICAL_HOLD_MS = 400L;
     private static final double DEVICE_VERTICAL_ENTER_DEGREES = 10d;
-    private static final double DEVICE_VERTICAL_EXIT_DEGREES = 10d;
+    // Hysteresis: once upright, small hand movements must not flip the state back.
+    private static final double DEVICE_VERTICAL_EXIT_DEGREES = 16d;
+    // Beyond this tilt even a gesture already in progress is restarted.
+    private static final double DEVICE_SEVERE_TILT_DEGREES = 28d;
 
     public static final String EXTRA_OPTIONS_JSON = "mlKitSuite.face.options";
     public static final String EXTRA_IMAGE_WEB_BASE_URL = "mlKitSuite.face.imageWebBaseUrl";
@@ -82,6 +86,7 @@ public final class FaceCaptureActivity extends Activity
     private SensorManager sensorManager;
     private Sensor verticalitySensor;
     private boolean deviceVerticalReady;
+    private boolean deviceSeverelyTilted;
     private long deviceVerticalSince;
 
     @Override
@@ -215,11 +220,16 @@ public final class FaceCaptureActivity extends Activity
                     .build();
                 imageAnalysis = new ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setTargetResolution(new android.util.Size(1280, 720))
+                    // Portrait 480x640 is plenty for face detection/contours on a face that
+                    // fills the guide, and roughly halves ML Kit latency versus 720p, which
+                    // gives the gesture tracker more samples per head movement.
+                    .setTargetResolution(new android.util.Size(480, 640))
                     .setTargetRotation(getWindowManager().getDefaultDisplay().getRotation())
                     .build();
-                analyzer = new FaceFrameAnalyzer(config, this, ContextCompat.getMainExecutor(this));
+                analyzer = new FaceFrameAnalyzer(config, this, ContextCompat.getMainExecutor(this),
+                    lenient(analysisExecutor));
                 analyzer.setDeviceVerticalReady(deviceVerticalReady);
+                analyzer.setDeviceSeverelyTilted(deviceSeverelyTilted);
                 imageAnalysis.setAnalyzer(analysisExecutor, analyzer);
                 cameraProvider.unbindAll();
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA,
@@ -296,7 +306,8 @@ public final class FaceCaptureActivity extends Activity
             @Override
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults result) {
                 File directory = new File(getCacheDir(), "mlkit-suite");
-                stillProcessor.process(raw, directory, new FaceStillProcessor.Callback() {
+                stillProcessor.process(raw, directory, lenient(captureExecutor),
+                    new FaceStillProcessor.Callback() {
                     @Override public void onSuccess(FaceStillProcessor.Result processed) {
                         raw.delete();
                         mainHandler.post(() -> handleCapturedResult(processed));
@@ -476,7 +487,11 @@ public final class FaceCaptureActivity extends Activity
         if (sensorManager == null || verticalitySensor == null) return;
         deviceVerticalReady = false;
         deviceVerticalSince = 0L;
-        if (analyzer != null) analyzer.setDeviceVerticalReady(false);
+        deviceSeverelyTilted = false;
+        if (analyzer != null) {
+            analyzer.setDeviceVerticalReady(false);
+            analyzer.setDeviceSeverelyTilted(false);
+        }
         sensorManager.registerListener(this, verticalitySensor, SensorManager.SENSOR_DELAY_UI);
     }
 
@@ -506,6 +521,11 @@ public final class FaceCaptureActivity extends Activity
             deviceVerticalReady = nextReady;
             if (analyzer != null) analyzer.setDeviceVerticalReady(nextReady);
         }
+        boolean severe = tiltDegrees > DEVICE_SEVERE_TILT_DEGREES;
+        if (severe != deviceSeverelyTilted) {
+            deviceSeverelyTilted = severe;
+            if (analyzer != null) analyzer.setDeviceSeverelyTilted(severe);
+        }
         if (overlayView != null) {
             overlayView.updateDeviceTilt((float) tiltDegrees, deviceVerticalReady);
         }
@@ -534,15 +554,25 @@ public final class FaceCaptureActivity extends Activity
                 action = config.localization.text("face_gesture_prepare");
             }
         } else if (progress.stage == FaceCaptureModels.GestureStage.RETURN_NEUTRAL) {
-            action = config.localization.text("face_gesture_return");
+            if (config.requireDeviceVertical && !deviceVerticalReady) {
+                action = config.localization.text("face_device_vertical");
+            } else if (analysis.pitch > 11f) {
+                action = config.localization.text("face_lower_head");
+            } else if (analysis.pitch < -11f) {
+                action = config.localization.text("face_raise_head");
+            } else {
+                action = config.localization.text("face_gesture_return");
+            }
         } else {
-            int phase = progress.debug == null ? 0 : progress.debug.phase;
+            // NOD and SHAKE accept either direction first: start with the generic
+            // instruction, then ask for the side that is still missing.
+            int firstSide = progress.debug == null ? 0 : progress.debug.firstSide;
             if (progress.gesture == FaceCaptureModels.Gesture.NOD) {
-                action = config.localization.text(phase == 0
-                    ? "face_gesture_nod_up" : "face_gesture_nod_down");
+                action = config.localization.text(firstSide == 0 ? "face_gesture_nod"
+                    : firstSide > 0 ? "face_gesture_nod_down" : "face_gesture_nod_up_now");
             } else if (progress.gesture == FaceCaptureModels.Gesture.SHAKE) {
-                action = config.localization.text(phase == 0
-                    ? "face_gesture_shake_right" : "face_gesture_shake_left");
+                action = config.localization.text(firstSide == 0 ? "face_gesture_shake"
+                    : firstSide < 0 ? "face_gesture_shake_left" : "face_gesture_shake_right_now");
             } else {
                 action = config.localization.text("face_gesture_"
                     + progress.gesture.name().toLowerCase(Locale.US));
@@ -569,6 +599,17 @@ public final class FaceCaptureActivity extends Activity
         }
         int captureCompleted = pendingCandidate == null ? 0 : 1;
         return Math.min(total, (faceAccepted ? 1 : 0) + gesturesCompleted + captureCompleted);
+    }
+
+    /** Drops late ML Kit callbacks instead of throwing once the activity shut its executors. */
+    private static java.util.concurrent.Executor lenient(ExecutorService executor) {
+        return command -> {
+            try {
+                executor.execute(command);
+            } catch (RejectedExecutionException ignored) {
+                // The activity is being destroyed.
+            }
+        };
     }
 
     private FrameLayout.LayoutParams matchParent() {

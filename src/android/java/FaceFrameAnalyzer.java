@@ -21,7 +21,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
-    private static final long FACE_LOSS_GRACE_MS = 300L;
+    private static final long FACE_LOSS_GRACE_MS = 700L;
 
     interface Listener {
         void onAnalysis(FaceCaptureModels.Analysis analysis);
@@ -31,25 +31,30 @@ final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
     private final FaceCaptureConfig config;
     private final Listener listener;
     private final Executor callbackExecutor;
+    private final Executor detectorExecutor;
     private final FaceDetector detector;
     private final FaceCaptureModels.GestureTracker gestureTracker;
     private final AtomicBoolean processing = new AtomicBoolean(false);
     private final FaceCaptureModels.StabilityTracker stability = new FaceCaptureModels.StabilityTracker();
     private volatile boolean enabled = true;
     private volatile boolean deviceVerticalReady;
+    private volatile boolean deviceSeverelyTilted;
     private volatile RectF previewGuide;
     private volatile int previewWidth;
     private volatile int previewHeight;
     private long faceMissingSince;
 
-    FaceFrameAnalyzer(FaceCaptureConfig config, Listener listener, Executor callbackExecutor) {
+    FaceFrameAnalyzer(FaceCaptureConfig config, Listener listener, Executor callbackExecutor,
+                      Executor detectorExecutor) {
         this.config = config;
         this.listener = listener;
         this.callbackExecutor = callbackExecutor;
+        // ML Kit results are handled on the analysis thread instead of the UI thread.
+        this.detectorExecutor = detectorExecutor;
         deviceVerticalReady = !config.requireDeviceVertical;
         gestureTracker = new FaceCaptureModels.GestureTracker(config.gestures,
             config.captureAfterGesture, config.gestureTimeoutMs, config.neutralTimeoutMs,
-            config.retryMessageMs);
+            config.retryMessageMs, config.checks.pose);
         FaceDetectorOptions.Builder builder = new FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
@@ -71,19 +76,29 @@ final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
         int rotation = imageProxy.getImageInfo().getRotationDegrees();
         int width = (rotation == 90 || rotation == 270) ? imageProxy.getHeight() : imageProxy.getWidth();
         int height = (rotation == 90 || rotation == 270) ? imageProxy.getWidth() : imageProxy.getHeight();
-        float[] quality = imageQuality(imageProxy);
-        InputImage input = InputImage.fromMediaImage(imageProxy.getImage(), rotation);
-        detector.process(input)
-            .addOnSuccessListener(faces -> {
-                FaceCaptureModels.Analysis analysis = classify(faces, width, height,
-                    quality[0], quality[1]);
-                callbackExecutor.execute(() -> listener.onAnalysis(analysis));
-            })
-            .addOnFailureListener(error -> callbackExecutor.execute(() -> listener.onAnalyzerError(error)))
-            .addOnCompleteListener(task -> {
-                processing.set(false);
-                imageProxy.close();
-            });
+        try {
+            float[] quality = imageQuality(imageProxy);
+            InputImage input = InputImage.fromMediaImage(imageProxy.getImage(), rotation);
+            detector.process(input)
+                .addOnSuccessListener(detectorExecutor, faces -> {
+                    if (!enabled) return;
+                    FaceCaptureModels.Analysis analysis = classify(faces, width, height,
+                        quality[0], quality[1]);
+                    callbackExecutor.execute(() -> listener.onAnalysis(analysis));
+                })
+                .addOnFailureListener(detectorExecutor, error -> {
+                    if (enabled) callbackExecutor.execute(() -> listener.onAnalyzerError(error));
+                })
+                .addOnCompleteListener(detectorExecutor, task -> {
+                    imageProxy.close();
+                    processing.set(false);
+                });
+        } catch (RuntimeException error) {
+            // Never leave the analyzer stuck holding a frame if ML Kit rejects the input.
+            imageProxy.close();
+            processing.set(false);
+            if (enabled) callbackExecutor.execute(() -> listener.onAnalyzerError(error));
+        }
     }
 
     void close() {
@@ -93,6 +108,10 @@ final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
 
     void setDeviceVerticalReady(boolean ready) {
         deviceVerticalReady = ready;
+    }
+
+    void setDeviceSeverelyTilted(boolean severe) {
+        deviceSeverelyTilted = severe;
     }
 
     void setPreviewGeometry(int width, int height, RectF guide) {
@@ -106,7 +125,14 @@ final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
     ) {
         FaceCaptureModels.State state;
         long now = SystemClock.elapsedRealtime();
-        if (config.requireDeviceVertical && !deviceVerticalReady) {
+        boolean deviceUpright = !config.requireDeviceVertical || deviceVerticalReady;
+        // A gesture already underway is not interrupted by a moderate device tilt: people
+        // naturally move the phone while nodding or turning. The photo itself stays blocked
+        // until the device is upright again (the tracker receives deviceUpright below).
+        FaceCaptureModels.GestureStage currentStage = gestureTracker.progress().stage;
+        boolean gestureInMotion = currentStage == FaceCaptureModels.GestureStage.PERFORM
+            || currentStage == FaceCaptureModels.GestureStage.RETURN_NEUTRAL;
+        if (!deviceUpright && (deviceSeverelyTilted || !gestureInMotion)) {
             stability.clear();
             faceMissingSince = 0L;
             FaceCaptureModels.GestureProgress progress = gestureTracker.progress();
@@ -187,7 +213,7 @@ final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
             state = FaceCaptureModels.State.GESTURE;
         } else if (activeGesture) {
             gestureProgress = gestureTracker.update(yaw, pitch, roll, leftEye, rightEye, smile,
-                mouthOpenRatio, now);
+                mouthOpenRatio, now, deviceUpright);
             state = FaceCaptureModels.State.GESTURE;
         } else if (config.checks.faceSize && widthFraction < 0.28f) state = FaceCaptureModels.State.MOVE_CLOSER;
         else if (config.checks.faceSize && widthFraction > 0.62f) state = FaceCaptureModels.State.MOVE_AWAY;
@@ -200,7 +226,7 @@ final class FaceFrameAnalyzer implements ImageAnalysis.Analyzer {
         else if (config.checks.sharpness && sharpness < 0.10f) state = FaceCaptureModels.State.HOLD_STILL;
         else if (!gestureTracker.isComplete()) {
             gestureProgress = gestureTracker.update(yaw, pitch, roll, leftEye, rightEye, smile,
-                mouthOpenRatio, now);
+                mouthOpenRatio, now, deviceUpright);
             state = FaceCaptureModels.State.GESTURE;
         } else if (config.checks.pose && (Math.abs(yaw) > 11f
             || Math.abs(pitch) > 11f || Math.abs(roll) > 9f)) {

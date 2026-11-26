@@ -94,8 +94,8 @@ final class FaceCaptureConfig {
         int captureAfter = gestures.isEmpty()
             ? strictInteger(options, "captureAfterGesture", 0, 0, 0)
             : strictInteger(options, "captureAfterGesture", gestures.size(), 1, gestures.size());
-        long gestureTimeout = strictLong(options, "gestureTimeoutMs", 4000L, 1000L, 15000L);
-        long neutralTimeout = strictLong(options, "neutralTimeoutMs", 2000L, 500L, 5000L);
+        long gestureTimeout = strictLong(options, "gestureTimeoutMs", 6000L, 1000L, 15000L);
+        long neutralTimeout = strictLong(options, "neutralTimeoutMs", 3000L, 500L, 5000L);
         long retryMessage = strictLong(options, "retryMessageMs", 1000L, 250L, 3000L);
         return new FaceCaptureConfig(width, height, quality, close, debug, beep, revealCapture,
             requireDeviceVertical, localization, timeout, Checks.fromJson(rawChecks), gestures, captureAfter,

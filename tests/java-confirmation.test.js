@@ -11,7 +11,10 @@ var sources = [
     path.join(root, 'src', 'android', 'java', 'BarcodeConfirmationTracker.java'),
     path.join(root, 'src', 'android', 'java', 'BarcodeScanRegion.java'),
     path.join(root, 'tests', 'java', 'BarcodeConfirmationTrackerTest.java'),
-    path.join(root, 'tests', 'java', 'BarcodeScanRegionTest.java')
+    path.join(root, 'tests', 'java', 'BarcodeScanRegionTest.java'),
+    path.join(root, 'src', 'android', 'java', 'FaceCaptureModels.java'),
+    path.join(root, 'tests', 'java', 'stubs', 'android', 'graphics', 'RectF.java'),
+    path.join(root, 'tests', 'java', 'FaceGestureTrackerTest.java')
 ];
 var executable = process.platform === 'win32' ? '.exe' : '';
 var javaHomes = [
@@ -35,6 +38,9 @@ try {
     ], { stdio: 'inherit' });
     childProcess.execFileSync(java, [
         '-cp', output, 'com.andreszs.plugins.mlkitsuite.BarcodeScanRegionTest'
+    ], { stdio: 'inherit' });
+    childProcess.execFileSync(java, [
+        '-cp', output, 'com.andreszs.plugins.mlkitsuite.FaceGestureTrackerTest'
     ], { stdio: 'inherit' });
 } finally {
     fs.rmSync(output, { recursive: true, force: true });

@@ -36,12 +36,19 @@ final class FaceCaptureModels {
         final float relativeYaw;
         final float relativePitch;
         final float relativeRoll;
+        /**
+         * Direction of the first accepted swing of a two-phase NOD or SHAKE: +1 when the
+         * first excursion went to positive angles (up / left), -1 for negative angles
+         * (down / right) and 0 while no side has been accepted yet.
+         */
+        final int firstSide;
 
         GestureDebug(int phase, int phaseCount, GestureMetric metric,
                      boolean baselineSet, float rawPrimary, float rawSecondary,
                      float baseline, float relative, float target, boolean lessThan,
                      boolean satisfied, long heldMs, long requiredHoldMs,
-                     float relativeYaw, float relativePitch, float relativeRoll) {
+                     float relativeYaw, float relativePitch, float relativeRoll,
+                     int firstSide) {
             this.phase = phase;
             this.phaseCount = phaseCount;
             this.metric = metric;
@@ -58,6 +65,7 @@ final class FaceCaptureModels {
             this.relativeYaw = relativeYaw;
             this.relativePitch = relativePitch;
             this.relativeRoll = relativeRoll;
+            this.firstSide = firstSide;
         }
     }
 
@@ -132,26 +140,84 @@ final class FaceCaptureModels {
         }
     }
 
+    /**
+     * Liveness gesture state machine.
+     *
+     * <p>Design notes (v2):
+     * <ul>
+     *   <li>Head pose is smoothed with an exponential moving average so a single noisy
+     *       ML Kit frame can no longer reset an in-progress hold.</li>
+     *   <li>Every action uses hysteresis: a stricter threshold to start a hold and a looser
+     *       one to keep it.</li>
+     *   <li>NOD and SHAKE accept either direction first and are measured as a swing: the
+     *       second phase only needs to cross to the other side of the neutral pose while
+     *       covering enough total range from the first peak.</li>
+     *   <li>Accepting the first half of a NOD/SHAKE no longer freezes input, so a natural,
+     *       continuous head movement is recognized in one go.</li>
+     *   <li>The neutral pose required before a gesture only checks what matters for that
+     *       gesture; the neutral pose required before the photo also enforces the absolute
+     *       pose limits the still validator applies, avoiding late full retries.</li>
+     *   <li>The baseline is the mean of the neutral frames instead of a single frame.</li>
+     * </ul>
+     */
     static final class GestureTracker {
-        private static final long RETURN_NEUTRAL_HOLD_MS = 250L;
-        private static final long ARM_NEUTRAL_HOLD_MS = 650L;
-        private static final long ACTION_HOLD_MS = 160L;
-        private static final long PHASE_FEEDBACK_MS = 500L;
-        private static final float HORIZONTAL_TURN_DEGREES = 15f;
-        private static final float VERTICAL_NOD_DEGREES = 10f;
-        private static final float INITIAL_NEUTRAL_YAW_PITCH_DEGREES = 11f;
-        private static final float INITIAL_NEUTRAL_ROLL_DEGREES = 9f;
+        static final long ARM_NEUTRAL_HOLD_MS = 450L;
+        static final long RETURN_NEUTRAL_HOLD_MS = 250L;
+        static final long ACTION_HOLD_MS = 100L;
+        static final long SWING_HOLD_MS = 60L;
+        static final long BLINK_HOLD_MS = 0L;
+        static final long PHASE_FEEDBACK_MS = 350L;
+        static final int MIN_NEUTRAL_FRAMES = 3;
+        static final int MIN_ACTION_FRAMES = 2;
+
+        /** Weight of the newest pose sample in the moving average. */
+        static final float POSE_SMOOTHING = 0.6f;
+        /** Fraction of the entry threshold that keeps an action hold alive. */
+        static final float HOLD_HYSTERESIS = 0.7f;
+
+        static final float NEUTRAL_YAW_PITCH_DEGREES = 11f;
+        static final float NEUTRAL_ROLL_DEGREES = 9f;
+        /** Absolute pose accepted for the photo; the still validator allows 13/13/11. */
+        static final float CAPTURE_YAW_PITCH_DEGREES = 11f;
+        static final float CAPTURE_ROLL_DEGREES = 9f;
+
+        static final float NOD_DEGREES = 8f;
+        static final float SHAKE_DEGREES = 12f;
+        /** Second NOD/SHAKE phase: minimum excursion past neutral on the opposite side. */
+        static final float SWING_OPPOSITE_FACTOR = 0.55f;
+        /** Second NOD/SHAKE phase: minimum total travel from the first peak. */
+        static final float SWING_RANGE_FACTOR = 1.7f;
+        static final float LOOK_UP_DEGREES = 12f;
+        static final float LOOK_DOWN_DEGREES = 10f;
+
+        static final float MOUTH_OPEN_RATIO = 0.05f;
+        static final float MOUTH_CLOSED_RATIO = 0.035f;
+        static final float MOUTH_CAPTURE_RATIO = 0.045f;
+        static final float SMILE_ON = 0.65f;
+        static final float SMILE_OFF = 0.45f;
+        static final float SMILE_CAPTURE = 0.55f;
+        static final float EYES_CLOSED = 0.35f;
+        static final float EYES_OPEN = 0.5f;
+        static final float EYES_CAPTURE = 0.4f;
+
         private final List<Gesture> gestures;
         private final int captureAfterGesture;
         private final long gestureTimeoutMs;
         private final long neutralTimeoutMs;
         private final long retryMessageMs;
+        private final boolean enforceCapturePose;
         private int index;
         private int phase;
+        private int firstSide;
+        private float swingPeak;
         private long neutralSince;
         private int neutralFrames;
+        private float neutralSumYaw;
+        private float neutralSumPitch;
+        private float neutralSumRoll;
         private long actionSince;
         private int actionFrames;
+        private int actionSide;
         private boolean armed;
         private boolean returning;
         private boolean pausedForCapture;
@@ -164,6 +230,7 @@ final class FaceCaptureModels {
         private float baselineYaw;
         private float baselinePitch;
         private float baselineRoll;
+        private boolean smoothingReady;
         private long lastNow;
         private float lastYaw;
         private float lastPitch;
@@ -172,14 +239,23 @@ final class FaceCaptureModels {
         private float lastRightEye = -1f;
         private float lastSmile = -1f;
         private float lastMouthOpenRatio;
+        private boolean lastCaptureAllowed = true;
 
         GestureTracker(List<Gesture> gestures, int captureAfterGesture, long gestureTimeoutMs,
                        long neutralTimeoutMs, long retryMessageMs) {
+            this(gestures, captureAfterGesture, gestureTimeoutMs, neutralTimeoutMs,
+                retryMessageMs, true);
+        }
+
+        GestureTracker(List<Gesture> gestures, int captureAfterGesture, long gestureTimeoutMs,
+                       long neutralTimeoutMs, long retryMessageMs,
+                       boolean enforceCapturePose) {
             this.gestures = gestures;
             this.captureAfterGesture = captureAfterGesture;
             this.gestureTimeoutMs = gestureTimeoutMs;
             this.neutralTimeoutMs = neutralTimeoutMs;
             this.retryMessageMs = retryMessageMs;
+            this.enforceCapturePose = enforceCapturePose;
         }
 
         synchronized boolean isComplete() {
@@ -205,42 +281,66 @@ final class FaceCaptureModels {
                 debugSnapshot(gesture, stage), phaseFeedbackUntil != 0L);
         }
 
+        GestureProgress update(float yaw, float pitch, float roll, float leftEye,
+                               float rightEye, float smile, float mouthOpenRatio, long now) {
+            return update(yaw, pitch, roll, leftEye, rightEye, smile, mouthOpenRatio, now, true);
+        }
+
+        /**
+         * @param captureAllowed false while an external condition (for example, the device
+         *                       not being held upright) must block the neutral pose that
+         *                       precedes the photo. It never interrupts a gesture in progress.
+         */
         synchronized GestureProgress update(float yaw, float pitch, float roll, float leftEye,
                                              float rightEye, float smile,
-                                             float mouthOpenRatio, long now) {
+                                             float mouthOpenRatio, long now,
+                                             boolean captureAllowed) {
             lastNow = now;
-            lastYaw = yaw;
-            lastPitch = pitch;
-            lastRoll = roll;
+            if (!smoothingReady) {
+                lastYaw = yaw;
+                lastPitch = pitch;
+                lastRoll = roll;
+                smoothingReady = true;
+            } else {
+                lastYaw += POSE_SMOOTHING * (yaw - lastYaw);
+                lastPitch += POSE_SMOOTHING * (pitch - lastPitch);
+                lastRoll += POSE_SMOOTHING * (roll - lastRoll);
+            }
             lastLeftEye = leftEye;
             lastRightEye = rightEye;
             lastSmile = smile;
             lastMouthOpenRatio = mouthOpenRatio;
+            lastCaptureAllowed = captureAllowed;
+
             GestureProgress timed = tick(now);
-            if (timed.stage == GestureStage.RETRY || timed.phaseFeedback) return timed;
+            if (timed.stage == GestureStage.RETRY) return timed;
+            // Only the feedback that completes a gesture pauses input; the feedback shown
+            // after the first half of a NOD/SHAKE is purely visual.
+            if (phaseFeedbackUntil != 0L && phaseFeedbackCompletesGesture) return timed;
             if (pausedForCapture) return progress();
             if (isComplete()) return progress();
-            float neutralYaw = baselineSet ? yaw - baselineYaw : yaw;
-            float neutralPitch = baselineSet ? pitch - baselinePitch : pitch;
-            float neutralRoll = baselineSet ? roll - baselineRoll : roll;
-            boolean neutral = Math.abs(neutralYaw) < INITIAL_NEUTRAL_YAW_PITCH_DEGREES
-                && Math.abs(neutralPitch) < INITIAL_NEUTRAL_YAW_PITCH_DEGREES
-                && Math.abs(neutralRoll) < INITIAL_NEUTRAL_ROLL_DEGREES
-                && mouthOpenRatio < 0.035f
-                && (leftEye < 0f || leftEye > 0.50f)
-                && (rightEye < 0f || rightEye > 0.50f)
-                && (smile < 0f || smile < 0.48f);
+
+            float relativeYaw = relative(lastYaw, baselineYaw);
+            float relativePitch = relative(lastPitch, baselinePitch);
+            float relativeRoll = relative(lastRoll, baselineRoll);
+            Gesture gesture = gestures.get(index);
+
             if (!armed || returning) {
                 if (returning && now - stageStartedAt > neutralTimeoutMs) {
                     beginRetry(now);
                     return progress();
                 }
+                boolean neutral = returning
+                    ? captureNeutral(gesture, relativeYaw, relativePitch, relativeRoll)
+                        && captureAllowed
+                    : armNeutral(gesture, relativeYaw, relativePitch, relativeRoll);
                 long requiredNeutralHoldMs = returning
                     ? RETURN_NEUTRAL_HOLD_MS : ARM_NEUTRAL_HOLD_MS;
                 if (holdNeutral(neutral, now, requiredNeutralHoldMs)) {
                     if (returning) {
                         index++;
                         phase = 0;
+                        firstSide = 0;
                         returning = false;
                         armed = false;
                         stageStartedAt = 0;
@@ -248,11 +348,13 @@ final class FaceCaptureModels {
                             pausedForCapture = true;
                         }
                     } else {
-                        baselineYaw = yaw;
-                        baselinePitch = pitch;
-                        baselineRoll = roll;
+                        baselineYaw = neutralSumYaw / neutralFrames;
+                        baselinePitch = neutralSumPitch / neutralFrames;
+                        baselineRoll = neutralSumRoll / neutralFrames;
                         baselineSet = true;
                         armed = true;
+                        phase = 0;
+                        firstSide = 0;
                         stageStartedAt = now;
                     }
                     clearNeutral();
@@ -266,40 +368,48 @@ final class FaceCaptureModels {
                 return progress();
             }
 
-            Gesture gesture = gestures.get(index);
-            float relativeYaw = yaw - baselineYaw;
-            float relativePitch = pitch - baselinePitch;
-            boolean condition;
-            if (gesture == Gesture.NOD) {
-                float angle = relativePitch;
-                if (phase == 0) {
-                    condition = angle > VERTICAL_NOD_DEGREES;
-                    if (holdAction(condition, now)) {
-                        beginPhaseFeedback(now, false);
-                        clearAction();
-                    }
-                } else {
-                    condition = angle < -VERTICAL_NOD_DEGREES;
-                    if (holdAction(condition, now)) beginPhaseFeedback(now, true);
-                }
-            } else if (gesture == Gesture.SHAKE) {
-                float angle = relativeYaw;
-                if (phase == 0) {
-                    condition = angle < -HORIZONTAL_TURN_DEGREES;
-                    if (holdAction(condition, now)) {
-                        beginPhaseFeedback(now, false);
-                        clearAction();
-                    }
-                } else {
-                    condition = angle > HORIZONTAL_TURN_DEGREES;
-                    if (holdAction(condition, now)) beginPhaseFeedback(now, true);
-                }
+            if (gesture == Gesture.NOD || gesture == Gesture.SHAKE) {
+                performSwing(gesture == Gesture.NOD ? relativePitch : relativeYaw,
+                    gesture == Gesture.NOD ? NOD_DEGREES : SHAKE_DEGREES, now);
             } else {
-                condition = matches(gesture, relativeYaw, relativePitch,
-                    leftEye, rightEye, smile, mouthOpenRatio);
-                if (holdAction(condition, now)) beginPhaseFeedback(now, true);
+                boolean holding = actionFrames > 0;
+                boolean condition = holding
+                    ? sustains(gesture, relativePitch, leftEye, rightEye, smile, mouthOpenRatio)
+                    : starts(gesture, relativePitch, leftEye, rightEye, smile, mouthOpenRatio);
+                long hold = gesture == Gesture.BLINK ? BLINK_HOLD_MS : ACTION_HOLD_MS;
+                if (holdAction(condition, now, hold)) beginPhaseFeedback(now, true);
             }
             return progress();
+        }
+
+        private void performSwing(float angle, float threshold, long now) {
+            if (phase == 0) {
+                if (actionFrames == 0) actionSide = angle >= 0f ? 1 : -1;
+                boolean condition = actionFrames == 0
+                    ? Math.abs(angle) > threshold
+                    : actionSide * angle > threshold * HOLD_HYSTERESIS;
+                if (actionFrames > 0 && actionSide * angle > actionSide * swingPeak) {
+                    swingPeak = angle;
+                } else if (actionFrames == 0) {
+                    swingPeak = angle;
+                }
+                if (holdAction(condition, now, SWING_HOLD_MS)) {
+                    firstSide = actionSide;
+                    phase = 1;
+                    clearAction();
+                    beginPhaseFeedback(now, false);
+                }
+                return;
+            }
+            // Keep following the first peak while the head is still travelling that way.
+            if (firstSide * angle > firstSide * swingPeak) swingPeak = angle;
+            float opposite = -firstSide * angle;
+            float travel = Math.abs(swingPeak - angle);
+            boolean holding = actionFrames > 0;
+            float factor = holding ? HOLD_HYSTERESIS : 1f;
+            boolean condition = opposite > threshold * SWING_OPPOSITE_FACTOR * factor
+                && travel > threshold * SWING_RANGE_FACTOR * factor;
+            if (holdAction(condition, now, SWING_HOLD_MS)) beginPhaseFeedback(now, true);
         }
 
         synchronized GestureProgress tick(long now) {
@@ -308,15 +418,13 @@ final class FaceCaptureModels {
                 if (now < retryUntil) return progress();
                 resetCore();
             }
-            if (phaseFeedbackUntil != 0L) {
-                if (now < phaseFeedbackUntil) return progress();
+            if (phaseFeedbackUntil != 0L && now >= phaseFeedbackUntil) {
                 boolean completesGesture = phaseFeedbackCompletesGesture;
                 phaseFeedbackUntil = 0L;
                 phaseFeedbackCompletesGesture = false;
-                clearAction();
                 if (completesGesture) completeAction(now);
-                else phase = 1;
             }
+            if (phaseFeedbackUntil != 0L && phaseFeedbackCompletesGesture) return progress();
             if (returning && now - stageStartedAt > neutralTimeoutMs) beginRetry(now);
             else if (armed && !returning && now - stageStartedAt > gestureTimeoutMs) beginRetry(now);
             return progress();
@@ -329,6 +437,7 @@ final class FaceCaptureModels {
             armed = false;
             returning = false;
             phase = 0;
+            firstSide = 0;
             phaseFeedbackUntil = 0L;
             phaseFeedbackCompletesGesture = false;
             stageStartedAt = 0;
@@ -357,6 +466,8 @@ final class FaceCaptureModels {
         private void resetCore() {
             index = 0;
             phase = 0;
+            firstSide = 0;
+            swingPeak = 0f;
             phaseFeedbackUntil = 0L;
             phaseFeedbackCompletesGesture = false;
             armed = false;
@@ -369,6 +480,7 @@ final class FaceCaptureModels {
             baselineYaw = 0f;
             baselinePitch = 0f;
             baselineRoll = 0f;
+            smoothingReady = false;
             lastYaw = 0f;
             lastPitch = 0f;
             lastRoll = 0f;
@@ -376,29 +488,92 @@ final class FaceCaptureModels {
             lastRightEye = -1f;
             lastSmile = -1f;
             lastMouthOpenRatio = 0f;
+            lastCaptureAllowed = true;
             clearNeutral();
             clearAction();
         }
 
+        private float relative(float value, float baseline) {
+            return baselineSet ? value - baseline : value;
+        }
+
+        private static boolean poseNeutral(float yaw, float pitch, float roll) {
+            return Math.abs(yaw) < NEUTRAL_YAW_PITCH_DEGREES
+                && Math.abs(pitch) < NEUTRAL_YAW_PITCH_DEGREES
+                && Math.abs(roll) < NEUTRAL_ROLL_DEGREES;
+        }
+
+        /** Neutral pose required before a gesture starts: pose plus the gesture's own rest state. */
+        private boolean armNeutral(Gesture gesture, float yaw, float pitch, float roll) {
+            if (!poseNeutral(yaw, pitch, roll)) return false;
+            switch (gesture) {
+                case OPEN_MOUTH: return lastMouthOpenRatio < MOUTH_CLOSED_RATIO;
+                case SMILE: return lastSmile < 0f || lastSmile < SMILE_OFF;
+                case BLINK: return (lastLeftEye < 0f || lastLeftEye > EYES_OPEN)
+                    && (lastRightEye < 0f || lastRightEye > EYES_OPEN);
+                default: return true;
+            }
+        }
+
+        /** Neutral pose required before the photo; mirrors the still validator limits. */
+        private boolean captureNeutral(Gesture gesture, float yaw, float pitch, float roll) {
+            if (!poseNeutral(yaw, pitch, roll)) return false;
+            if (enforceCapturePose && (Math.abs(lastYaw) >= CAPTURE_YAW_PITCH_DEGREES
+                || Math.abs(lastPitch) >= CAPTURE_YAW_PITCH_DEGREES
+                || Math.abs(lastRoll) >= CAPTURE_ROLL_DEGREES)) return false;
+            if (lastMouthOpenRatio >= MOUTH_CAPTURE_RATIO) return false;
+            if (lastLeftEye >= 0f && lastLeftEye < EYES_CAPTURE) return false;
+            if (lastRightEye >= 0f && lastRightEye < EYES_CAPTURE) return false;
+            return gesture != Gesture.SMILE || lastSmile < 0f || lastSmile < SMILE_CAPTURE;
+        }
+
+        private static boolean starts(Gesture gesture, float pitch, float leftEye,
+                                      float rightEye, float smile, float mouthOpenRatio) {
+            switch (gesture) {
+                case OPEN_MOUTH: return mouthOpenRatio > MOUTH_OPEN_RATIO;
+                case BLINK: return leftEye >= 0f && rightEye >= 0f
+                    && leftEye < EYES_CLOSED && rightEye < EYES_CLOSED;
+                case SMILE: return smile > SMILE_ON;
+                case LOOK_UP: return pitch > LOOK_UP_DEGREES;
+                case LOOK_DOWN: return pitch < -LOOK_DOWN_DEGREES;
+                default: return false;
+            }
+        }
+
+        private static boolean sustains(Gesture gesture, float pitch, float leftEye,
+                                        float rightEye, float smile, float mouthOpenRatio) {
+            switch (gesture) {
+                case OPEN_MOUTH: return mouthOpenRatio > MOUTH_CLOSED_RATIO;
+                case BLINK: return leftEye >= 0f && rightEye >= 0f
+                    && leftEye < EYES_OPEN && rightEye < EYES_OPEN;
+                case SMILE: return smile > SMILE_ON * HOLD_HYSTERESIS + 0.05f;
+                case LOOK_UP: return pitch > LOOK_UP_DEGREES * HOLD_HYSTERESIS;
+                case LOOK_DOWN: return pitch < -LOOK_DOWN_DEGREES * HOLD_HYSTERESIS;
+                default: return false;
+            }
+        }
+
         private GestureDebug debugSnapshot(Gesture gesture, GestureStage stage) {
-            float relativeYaw = baselineSet ? lastYaw - baselineYaw : lastYaw;
-            float relativePitch = baselineSet ? lastPitch - baselinePitch : lastPitch;
-            float relativeRoll = baselineSet ? lastRoll - baselineRoll : lastRoll;
+            float relativeYaw = relative(lastYaw, baselineYaw);
+            float relativePitch = relative(lastPitch, baselinePitch);
+            float relativeRoll = relative(lastRoll, baselineRoll);
             int phaseCount = gesture == Gesture.NOD || gesture == Gesture.SHAKE ? 2 : 1;
+            // While the first-half feedback is visible keep reporting phase 0 so the overlay
+            // marks that half as accepted, even though detection already moved on.
+            int reportedPhase = phaseFeedbackUntil != 0L && !phaseFeedbackCompletesGesture
+                ? Math.max(0, phase - 1) : phase;
             if (stage == GestureStage.WAITING_NEUTRAL
                 || stage == GestureStage.RETURN_NEUTRAL) {
-                boolean neutral = Math.abs(relativeYaw) < INITIAL_NEUTRAL_YAW_PITCH_DEGREES
-                    && Math.abs(relativePitch) < INITIAL_NEUTRAL_YAW_PITCH_DEGREES
-                    && Math.abs(relativeRoll) < INITIAL_NEUTRAL_ROLL_DEGREES
-                    && lastMouthOpenRatio < 0.035f
-                    && (lastLeftEye < 0f || lastLeftEye > 0.50f)
-                    && (lastRightEye < 0f || lastRightEye > 0.50f)
-                    && (lastSmile < 0f || lastSmile < 0.48f);
+                boolean neutral = stage == GestureStage.RETURN_NEUTRAL
+                    ? captureNeutral(gesture, relativeYaw, relativePitch, relativeRoll)
+                        && lastCaptureAllowed
+                    : armNeutral(gesture, relativeYaw, relativePitch, relativeRoll);
                 long required = stage == GestureStage.RETURN_NEUTRAL
                     ? RETURN_NEUTRAL_HOLD_MS : ARM_NEUTRAL_HOLD_MS;
-                return new GestureDebug(phase, phaseCount, GestureMetric.NEUTRAL,
+                return new GestureDebug(reportedPhase, phaseCount, GestureMetric.NEUTRAL,
                     baselineSet, 0f, Float.NaN, 0f, 0f, 0f, false, neutral,
-                    elapsed(neutralSince), required, relativeYaw, relativePitch, relativeRoll);
+                    elapsed(neutralSince), required, relativeYaw, relativePitch, relativeRoll,
+                    firstSide);
             }
 
             GestureMetric metric = GestureMetric.NONE;
@@ -409,32 +584,37 @@ final class FaceCaptureModels {
             float target = 0f;
             boolean lessThan = false;
             boolean satisfied = false;
+            long requiredHold = ACTION_HOLD_MS;
             switch (gesture) {
                 case NOD:
-                    metric = GestureMetric.PITCH;
-                    rawPrimary = lastPitch;
-                    baseline = baselinePitch;
-                    relative = relativePitch;
-                    target = phase == 0 ? VERTICAL_NOD_DEGREES : -VERTICAL_NOD_DEGREES;
-                    lessThan = phase != 0;
-                    satisfied = lessThan ? relative < target : relative > target;
+                case SHAKE: {
+                    boolean nod = gesture == Gesture.NOD;
+                    float threshold = nod ? NOD_DEGREES : SHAKE_DEGREES;
+                    metric = nod ? GestureMetric.PITCH : GestureMetric.YAW;
+                    rawPrimary = nod ? lastPitch : lastYaw;
+                    baseline = nod ? baselinePitch : baselineYaw;
+                    relative = nod ? relativePitch : relativeYaw;
+                    requiredHold = SWING_HOLD_MS;
+                    if (firstSide == 0) {
+                        int side = relative >= 0f ? 1 : -1;
+                        target = side * threshold;
+                        lessThan = side < 0;
+                        satisfied = Math.abs(relative) > threshold;
+                    } else {
+                        target = -firstSide * threshold * SWING_OPPOSITE_FACTOR;
+                        lessThan = firstSide > 0;
+                        satisfied = -firstSide * relative > threshold * SWING_OPPOSITE_FACTOR
+                            && Math.abs(swingPeak - relative) > threshold * SWING_RANGE_FACTOR;
+                    }
                     break;
-                case SHAKE:
-                    metric = GestureMetric.YAW;
-                    rawPrimary = lastYaw;
-                    baseline = baselineYaw;
-                    relative = relativeYaw;
-                    target = phase == 0 ? -HORIZONTAL_TURN_DEGREES : HORIZONTAL_TURN_DEGREES;
-                    lessThan = phase == 0;
-                    satisfied = lessThan ? relative < target : relative > target;
-                    break;
+                }
                 case LOOK_UP:
                 case LOOK_DOWN:
                     metric = GestureMetric.PITCH;
                     rawPrimary = lastPitch;
                     baseline = baselinePitch;
                     relative = relativePitch;
-                    target = gesture == Gesture.LOOK_UP ? 15f : -15f;
+                    target = gesture == Gesture.LOOK_UP ? LOOK_UP_DEGREES : -LOOK_DOWN_DEGREES;
                     lessThan = gesture == Gesture.LOOK_DOWN;
                     satisfied = lessThan ? relative < target : relative > target;
                     break;
@@ -442,14 +622,14 @@ final class FaceCaptureModels {
                     metric = GestureMetric.MOUTH;
                     rawPrimary = lastMouthOpenRatio;
                     relative = rawPrimary;
-                    target = 0.055f;
+                    target = MOUTH_OPEN_RATIO;
                     satisfied = relative > target;
                     break;
                 case SMILE:
                     metric = GestureMetric.SMILE;
                     rawPrimary = lastSmile;
                     relative = rawPrimary;
-                    target = 0.72f;
+                    target = SMILE_ON;
                     satisfied = relative > target;
                     break;
                 case BLINK:
@@ -457,18 +637,19 @@ final class FaceCaptureModels {
                     rawPrimary = lastLeftEye;
                     rawSecondary = lastRightEye;
                     relative = Math.max(rawPrimary, rawSecondary);
-                    target = 0.32f;
+                    target = EYES_CLOSED;
                     lessThan = true;
+                    requiredHold = BLINK_HOLD_MS;
                     satisfied = rawPrimary >= 0f && rawSecondary >= 0f
                         && rawPrimary < target && rawSecondary < target;
                     break;
                 default:
                     break;
             }
-            return new GestureDebug(phase, phaseCount, metric, baselineSet,
+            return new GestureDebug(reportedPhase, phaseCount, metric, baselineSet,
                 rawPrimary, rawSecondary, baseline, relative, target, lessThan,
-                satisfied, elapsed(actionSince), ACTION_HOLD_MS,
-                relativeYaw, relativePitch, relativeRoll);
+                satisfied, elapsed(actionSince), requiredHold,
+                relativeYaw, relativePitch, relativeRoll, firstSide);
         }
 
         private long elapsed(long since) {
@@ -486,16 +667,19 @@ final class FaceCaptureModels {
                 return false;
             }
             if (neutralFrames++ == 0) neutralSince = now;
-            return neutralFrames >= 3 && now - neutralSince >= requiredHoldMs;
+            neutralSumYaw += lastYaw;
+            neutralSumPitch += lastPitch;
+            neutralSumRoll += lastRoll;
+            return neutralFrames >= MIN_NEUTRAL_FRAMES && now - neutralSince >= requiredHoldMs;
         }
 
-        private boolean holdAction(boolean condition, long now) {
+        private boolean holdAction(boolean condition, long now, long requiredHoldMs) {
             if (!condition) {
                 clearAction();
                 return false;
             }
             if (actionFrames++ == 0) actionSince = now;
-            return actionFrames >= 2 && now - actionSince >= ACTION_HOLD_MS;
+            return actionFrames >= MIN_ACTION_FRAMES && now - actionSince >= requiredHoldMs;
         }
 
         private void completeAction(long now) {
@@ -510,28 +694,14 @@ final class FaceCaptureModels {
         private void beginPhaseFeedback(long now, boolean completesGesture) {
             phaseFeedbackUntil = now + PHASE_FEEDBACK_MS;
             phaseFeedbackCompletesGesture = completesGesture;
-            if (!completesGesture && stageStartedAt > 0L) {
-                stageStartedAt += PHASE_FEEDBACK_MS;
-            }
-        }
-
-        private static boolean matches(Gesture gesture, float yaw, float pitch,
-                                       float leftEye, float rightEye, float smile,
-                                       float mouthOpenRatio) {
-            switch (gesture) {
-                case OPEN_MOUTH: return mouthOpenRatio > 0.055f;
-                case BLINK: return leftEye >= 0f && rightEye >= 0f
-                    && leftEye < 0.32f && rightEye < 0.32f;
-                case SMILE: return smile > 0.72f;
-                case LOOK_UP: return pitch > 15f;
-                case LOOK_DOWN: return pitch < -15f;
-                default: return false;
-            }
         }
 
         private void clearNeutral() {
             neutralSince = 0;
             neutralFrames = 0;
+            neutralSumYaw = 0f;
+            neutralSumPitch = 0f;
+            neutralSumRoll = 0f;
         }
 
         private void clearAction() {

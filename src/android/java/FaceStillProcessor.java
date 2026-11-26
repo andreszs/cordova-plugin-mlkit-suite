@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 final class FaceStillProcessor {
     interface Callback {
@@ -69,11 +70,14 @@ final class FaceStillProcessor {
             .build());
     }
 
-    void process(File source, File outputDirectory, Callback callback) {
+    /**
+     * @param workExecutor runs cropping, quality analysis and JPEG encoding off the UI thread.
+     */
+    void process(File source, File outputDirectory, Executor workExecutor, Callback callback) {
         try {
             Bitmap bitmap = orientedBitmap(source);
             detector.process(InputImage.fromBitmap(bitmap, 0))
-                .addOnSuccessListener(faces -> {
+                .addOnSuccessListener(workExecutor, faces -> {
                     try {
                         Result result = createResult(bitmap, faces, outputDirectory);
                         callback.onSuccess(result);
@@ -85,7 +89,10 @@ final class FaceStillProcessor {
                         bitmap.recycle();
                     }
                 })
-                .addOnFailureListener(callback::onFailure);
+                .addOnFailureListener(workExecutor, error -> {
+                    bitmap.recycle();
+                    callback.onFailure(error);
+                });
         } catch (Exception error) {
             callback.onFailure(error);
         }
@@ -179,8 +186,22 @@ final class FaceStillProcessor {
         return new Rect(left, top, left + Math.round(cropWidth), top + Math.round(cropHeight));
     }
 
+    /** Long edge the still is decoded at; far above the 2048px output cap after cropping. */
+    private static final int DECODE_TARGET_LONG_EDGE = 2000;
+
     private static Bitmap orientedBitmap(File file) throws Exception {
-        Bitmap raw = BitmapFactory.decodeFile(file.getAbsolutePath());
+        // Front cameras commonly return 8-16 MP stills. Decoding them at full size (and
+        // then rotating into a second full-size copy) costs 50-130 MB and noticeable time;
+        // a power-of-two subsample keeps detection quality and output resolution intact.
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+        int longEdge = Math.max(bounds.outWidth, bounds.outHeight);
+        int sample = 1;
+        while (longEdge / (sample * 2) >= DECODE_TARGET_LONG_EDGE) sample *= 2;
+        BitmapFactory.Options decode = new BitmapFactory.Options();
+        decode.inSampleSize = sample;
+        Bitmap raw = BitmapFactory.decodeFile(file.getAbsolutePath(), decode);
         if (raw == null) throw new IllegalStateException("Unable to decode the captured photo.");
         int orientation = new ExifInterface(file.getAbsolutePath()).getAttributeInt(
             ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
