@@ -36,6 +36,8 @@
 "face_gesture_nod_down" = "Ahora inclinala hacia abajo un instante";
 "face_gesture_shake_right" = "Girá levemente la cabeza hacia la derecha";
 "face_gesture_shake_left" = "Ahora girá levemente la cabeza hacia la izquierda";
+"face_gesture_nod_up_now" = "Ahora inclinala hacia arriba un instante";
+"face_gesture_shake_right_now" = "Ahora girá levemente la cabeza hacia la derecha";
 "face_gesture_capture_candidate" = "Mantené esta posición — tomando tu selfie";
 "face_gesture_retry" = "Vamos a intentarlo de nuevo";
 "face_gestures_complete" = "Gestos completados";

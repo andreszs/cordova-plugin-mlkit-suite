@@ -11,10 +11,13 @@ protocol FaceCaptureViewControllerDelegate: AnyObject {
 }
 
 final class FaceCaptureViewController: UIViewController {
-    private static let deviceVerticalHold: CFTimeInterval = 0.7
+    private static let deviceVerticalHold: CFTimeInterval = 0.4
     private static let deviceVerticalEnterDegrees: Double = 10
-    private static let deviceVerticalExitDegrees: Double = 10
-    private static let faceLossGrace: CFTimeInterval = 0.30
+    // Hysteresis: once upright, small hand movements must not flip the state back.
+    private static let deviceVerticalExitDegrees: Double = 16
+    // Beyond this tilt even a gesture already in progress is restarted.
+    private static let deviceSevereTiltDegrees: Double = 28
+    private static let faceLossGrace: CFTimeInterval = 0.70
     weak var delegate: FaceCaptureViewControllerDelegate?
 
     private let options: FaceCaptureOptions
@@ -48,7 +51,9 @@ final class FaceCaptureViewController: UIViewController {
     private var stableSince: CFTimeInterval = 0
     private var stableFrames = 0
     private var timeoutItem: DispatchWorkItem?
+    // Written and read on the analysis queue only (motionQueue runs on analysisQueue).
     private var deviceVerticalReady: Bool
+    private var deviceSeverelyTilted = false
     private var deviceVerticalSince: CFTimeInterval = 0
     private var faceMissingSince: CFTimeInterval = 0
     private let centeringLock = NSLock()
@@ -69,7 +74,8 @@ final class FaceCaptureViewController: UIViewController {
             gestures: options.gestures, captureAfterGesture: options.captureAfterGesture,
             gestureTimeoutMs: options.gestureTimeoutMs,
             neutralTimeoutMs: options.neutralTimeoutMs,
-            retryMessageMs: options.retryMessageMs
+            retryMessageMs: options.retryMessageMs,
+            enforceCapturePose: options.checks.pose
         )
         deviceVerticalReady = !options.requireDeviceVertical
         super.init(nibName: nil, bundle: nil)
@@ -230,7 +236,13 @@ final class FaceCaptureViewController: UIViewController {
     private func classify(faces: [Face], brightness: CGFloat, sharpness: CGFloat,
                           imageSize: CGSize) -> FaceCaptureAnalysis {
         let now = CACurrentMediaTime()
-        if options.requireDeviceVertical && !deviceVerticalReady {
+        let deviceUpright = !options.requireDeviceVertical || deviceVerticalReady
+        // A gesture already underway is not interrupted by a moderate device tilt: people
+        // naturally move the phone while nodding or turning. The photo itself stays blocked
+        // until the device is upright again (the tracker receives deviceUpright below).
+        let currentStage = gestureTracker.progress.stage
+        let gestureInMotion = currentStage == .perform || currentStage == .returnNeutral
+        if !deviceUpright && (deviceSeverelyTilted || !gestureInMotion) {
             resetStability()
             faceMissingSince = 0
             let progress = gestureTracker.progress
@@ -318,7 +330,8 @@ final class FaceCaptureViewController: UIViewController {
         else if activeGesture {
             gestureProgress = gestureTracker.update(
                 yaw: yaw, pitch: pitch, roll: roll, leftEye: leftEye, rightEye: rightEye,
-                smile: smile, mouthOpenRatio: mouthRatio, now: now
+                smile: smile, mouthOpenRatio: mouthRatio, now: now,
+                captureAllowed: deviceUpright
             )
             state = .gesture
         }
@@ -332,7 +345,8 @@ final class FaceCaptureViewController: UIViewController {
         else if !gestureTracker.isComplete {
             gestureProgress = gestureTracker.update(
                 yaw: yaw, pitch: pitch, roll: roll, leftEye: leftEye, rightEye: rightEye,
-                smile: smile, mouthOpenRatio: mouthRatio, now: now
+                smile: smile, mouthOpenRatio: mouthRatio, now: now,
+                captureAllowed: deviceUpright
             )
             state = .gesture
         } else if options.checks.pose && (
@@ -362,7 +376,8 @@ final class FaceCaptureViewController: UIViewController {
             centeringHorizontalOffset: centering.horizontalOffset,
             centeringVerticalOffset: centering.verticalOffset,
             centeringAvailable: centering.available,
-            centeringAccepted: centering.accepted
+            centeringAccepted: centering.accepted,
+            deviceUpright: deviceUpright
         )
     }
 
@@ -408,6 +423,7 @@ final class FaceCaptureViewController: UIViewController {
             let limit = self.deviceVerticalReady
                 ? Self.deviceVerticalExitDegrees : Self.deviceVerticalEnterDegrees
             let now = CACurrentMediaTime()
+            self.deviceSeverelyTilted = tilt > Self.deviceSevereTiltDegrees
             if tilt > limit {
                 self.deviceVerticalSince = 0
                 self.deviceVerticalReady = false
@@ -432,7 +448,9 @@ final class FaceCaptureViewController: UIViewController {
                                    stableDurationMs: 0, gestureProgress: progress,
                                    centeringHorizontalOffset: .nan,
                                    centeringVerticalOffset: .nan,
-                                   centeringAvailable: false, centeringAccepted: false)
+                                   centeringAvailable: false, centeringAccepted: false,
+                                   deviceUpright: !options.requireDeviceVertical
+                                       || deviceVerticalReady)
     }
 
     private func handle(_ analysis: FaceCaptureAnalysis, pixelBuffer: CVPixelBuffer) {
@@ -645,16 +663,30 @@ final class FaceCaptureViewController: UIViewController {
             } else {
                 action = options.localization.text("face_gesture_prepare")
             }
-        case .returnNeutral: action = options.localization.text("face_gesture_return")
+        case .returnNeutral:
+            if analysis?.deviceUpright == false {
+                action = options.localization.text("face_device_vertical")
+            } else if let pitch = analysis?.pitch, pitch > 11 {
+                action = options.localization.text("face_lower_head")
+            } else if let pitch = analysis?.pitch, pitch < -11 {
+                action = options.localization.text("face_raise_head")
+            } else {
+                action = options.localization.text("face_gesture_return")
+            }
         case .perform:
-            let phase = progress.debug?.phase ?? 0
+            // NOD and SHAKE accept either direction first: start with the generic
+            // instruction, then ask for the side that is still missing.
+            let firstSide = progress.debug?.firstSide ?? 0
             if gesture == .nod {
                 action = options.localization.text(
-                    phase == 0 ? "face_gesture_nod_up" : "face_gesture_nod_down"
+                    firstSide == 0 ? "face_gesture_nod"
+                        : firstSide > 0 ? "face_gesture_nod_down" : "face_gesture_nod_up_now"
                 )
             } else if gesture == .shake {
+                // iOS reports negative yaw toward the user's left (inverse of Android).
                 action = options.localization.text(
-                    phase == 0 ? "face_gesture_shake_left" : "face_gesture_shake_right"
+                    firstSide == 0 ? "face_gesture_shake"
+                        : firstSide < 0 ? "face_gesture_shake_right_now" : "face_gesture_shake_left"
                 )
             } else {
                 action = options.localization.text("face_gesture_" + gesture.rawValue.lowercased())

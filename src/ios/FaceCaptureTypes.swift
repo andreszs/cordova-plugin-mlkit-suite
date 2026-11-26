@@ -113,6 +113,8 @@ struct FaceGestureDebug {
     let relativeYaw: CGFloat
     let relativePitch: CGFloat
     let relativeRoll: CGFloat
+    /// Side accepted for the first half of NOD/SHAKE: +1, -1, or 0 while none was accepted.
+    let firstSide: Int
 }
 
 struct FaceGestureProgress {
@@ -124,25 +126,78 @@ struct FaceGestureProgress {
     let phaseFeedback: Bool
 }
 
+/// Liveness gesture state machine. Equivalent 1:1 to Android's
+/// `FaceCaptureModels.GestureTracker`:
+/// - Head pose is smoothed with an exponential moving average so a single noisy
+///   ML Kit frame can no longer reset an in-progress hold.
+/// - Every action uses hysteresis: a stricter threshold to start a hold and a looser
+///   one to keep it.
+/// - NOD and SHAKE accept either direction first and are measured as a swing: the
+///   second phase only needs to cross to the other side of the neutral pose while
+///   covering enough total range from the first peak.
+/// - Accepting the first half of a NOD/SHAKE no longer freezes input.
+/// - The neutral pose required before a gesture only checks what matters for that
+///   gesture; the neutral pose required before the photo also enforces the absolute
+///   pose limits the still validator applies.
+/// - The baseline is the mean of the neutral frames instead of a single frame.
 final class FaceGestureTracker {
-    private static let returnNeutralHold: CFTimeInterval = 0.25
-    private static let armNeutralHold: CFTimeInterval = 0.65
-    private static let phaseFeedbackDuration: CFTimeInterval = 0.5
-    private static let horizontalTurnDegrees: CGFloat = 15
-    private static let verticalNodDegrees: CGFloat = 10
-    private static let initialNeutralYawPitchDegrees: CGFloat = 11
-    private static let initialNeutralRollDegrees: CGFloat = 9
+    static let armNeutralHold: CFTimeInterval = 0.45
+    static let returnNeutralHold: CFTimeInterval = 0.25
+    static let actionHold: CFTimeInterval = 0.10
+    static let swingHold: CFTimeInterval = 0.06
+    static let blinkHold: CFTimeInterval = 0
+    static let phaseFeedbackDuration: CFTimeInterval = 0.35
+    static let minNeutralFrames = 3
+    static let minActionFrames = 2
+
+    /// Weight of the newest pose sample in the moving average.
+    static let poseSmoothing: CGFloat = 0.6
+    /// Fraction of the entry threshold that keeps an action hold alive.
+    static let holdHysteresis: CGFloat = 0.7
+
+    static let neutralYawPitchDegrees: CGFloat = 11
+    static let neutralRollDegrees: CGFloat = 9
+    /// Absolute pose accepted for the photo; the still validator allows 13/13/11.
+    static let captureYawPitchDegrees: CGFloat = 11
+    static let captureRollDegrees: CGFloat = 9
+
+    static let nodDegrees: CGFloat = 8
+    static let shakeDegrees: CGFloat = 12
+    /// Second NOD/SHAKE phase: minimum excursion past neutral on the opposite side.
+    static let swingOppositeFactor: CGFloat = 0.55
+    /// Second NOD/SHAKE phase: minimum total travel from the first peak.
+    static let swingRangeFactor: CGFloat = 1.7
+    static let lookUpDegrees: CGFloat = 12
+    static let lookDownDegrees: CGFloat = 10
+
+    static let mouthOpenRatio: CGFloat = 0.05
+    static let mouthClosedRatio: CGFloat = 0.035
+    static let mouthCaptureRatio: CGFloat = 0.045
+    static let smileOn: CGFloat = 0.65
+    static let smileOff: CGFloat = 0.45
+    static let smileCapture: CGFloat = 0.55
+    static let eyesClosed: CGFloat = 0.35
+    static let eyesOpen: CGFloat = 0.5
+    static let eyesCapture: CGFloat = 0.4
+
     private let gestures: [FaceGesture]
     private let captureAfterGesture: Int
     private let gestureTimeout: CFTimeInterval
     private let neutralTimeout: CFTimeInterval
     private let retryMessageDuration: CFTimeInterval
+    private let enforceCapturePose: Bool
     private var index = 0
     private var phase = 0
+    private var firstSide = 0
+    private var swingPeak: CGFloat = 0
     private var neutralSince: CFTimeInterval = 0
     private var neutralFrames = 0
+    private var neutralSumYaw: CGFloat = 0
+    private var neutralSumPitch: CGFloat = 0
+    private var neutralSumRoll: CGFloat = 0
     private var actionSince: CFTimeInterval = 0
     private var actionFrames = 0
+    private var actionSide = 0
     private var armed = false
     private var returning = false
     private var pausedForCapture = false
@@ -155,6 +210,7 @@ final class FaceGestureTracker {
     private var baselineYaw: CGFloat = 0
     private var baselinePitch: CGFloat = 0
     private var baselineRoll: CGFloat = 0
+    private var smoothingReady = false
     private var lastNow: CFTimeInterval = 0
     private var lastYaw: CGFloat = 0
     private var lastPitch: CGFloat = 0
@@ -163,14 +219,16 @@ final class FaceGestureTracker {
     private var lastRightEye: CGFloat?
     private var lastSmile: CGFloat?
     private var lastMouthOpenRatio: CGFloat = 0
+    private var lastCaptureAllowed = true
 
     init(gestures: [FaceGesture], captureAfterGesture: Int, gestureTimeoutMs: Int,
-         neutralTimeoutMs: Int, retryMessageMs: Int) {
+         neutralTimeoutMs: Int, retryMessageMs: Int, enforceCapturePose: Bool = true) {
         self.gestures = gestures
         self.captureAfterGesture = captureAfterGesture
         gestureTimeout = Double(gestureTimeoutMs) / 1000
         neutralTimeout = Double(neutralTimeoutMs) / 1000
         retryMessageDuration = Double(retryMessageMs) / 1000
+        self.enforceCapturePose = enforceCapturePose
     }
 
     var isComplete: Bool { index >= gestures.count && !pausedForCapture && retryUntil == 0 }
@@ -201,52 +259,72 @@ final class FaceGestureTracker {
                                    phaseFeedback: phaseFeedbackUntil != 0)
     }
 
+    /// - Parameter captureAllowed: false while an external condition (for example, the
+    ///   device not being held upright) must block the neutral pose that precedes the
+    ///   photo. It never interrupts a gesture in progress.
     func update(yaw: CGFloat, pitch: CGFloat, roll: CGFloat, leftEye: CGFloat?,
                 rightEye: CGFloat?, smile: CGFloat?, mouthOpenRatio: CGFloat,
-                now: CFTimeInterval) -> FaceGestureProgress {
+                now: CFTimeInterval, captureAllowed: Bool = true) -> FaceGestureProgress {
         lastNow = now
-        lastYaw = yaw
-        lastPitch = pitch
-        lastRoll = roll
+        if !smoothingReady {
+            lastYaw = yaw
+            lastPitch = pitch
+            lastRoll = roll
+            smoothingReady = true
+        } else {
+            lastYaw += Self.poseSmoothing * (yaw - lastYaw)
+            lastPitch += Self.poseSmoothing * (pitch - lastPitch)
+            lastRoll += Self.poseSmoothing * (roll - lastRoll)
+        }
         lastLeftEye = leftEye
         lastRightEye = rightEye
         lastSmile = smile
         lastMouthOpenRatio = mouthOpenRatio
+        lastCaptureAllowed = captureAllowed
+
         let timed = tick(now: now)
-        if timed.stage == .retry || timed.phaseFeedback { return timed }
+        if timed.stage == .retry { return timed }
+        // Only the feedback that completes a gesture pauses input; the feedback shown
+        // after the first half of a NOD/SHAKE is purely visual.
+        if phaseFeedbackUntil != 0 && phaseFeedbackCompletesGesture { return timed }
         if pausedForCapture { return progress }
         guard !isComplete else { return progress }
-        let neutralYaw = baselineSet ? yaw - baselineYaw : yaw
-        let neutralPitch = baselineSet ? pitch - baselinePitch : pitch
-        let neutralRoll = baselineSet ? roll - baselineRoll : roll
-        let neutral = abs(neutralYaw) < Self.initialNeutralYawPitchDegrees
-            && abs(neutralPitch) < Self.initialNeutralYawPitchDegrees
-            && abs(neutralRoll) < Self.initialNeutralRollDegrees
-            && mouthOpenRatio < 0.035
-            && (leftEye == nil || leftEye! > 0.50)
-            && (rightEye == nil || rightEye! > 0.50)
-            && (smile == nil || smile! < 0.48)
+
+        let relativeYaw = relative(lastYaw, baselineYaw)
+        let relativePitch = relative(lastPitch, baselinePitch)
+        let relativeRoll = relative(lastRoll, baselineRoll)
+        let gesture = gestures[index]
+
         if !armed || returning {
             if returning && now - stageStartedAt > neutralTimeout {
                 beginRetry(now: now)
                 return progress
             }
+            let neutral = returning
+                ? captureNeutral(gesture, yaw: relativeYaw, pitch: relativePitch,
+                                 roll: relativeRoll) && captureAllowed
+                : armNeutral(gesture, yaw: relativeYaw, pitch: relativePitch,
+                             roll: relativeRoll)
             let requiredNeutralHold = returning
                 ? Self.returnNeutralHold : Self.armNeutralHold
             if holdNeutral(neutral, now: now, requiredHold: requiredNeutralHold) {
                 if returning {
                     index += 1
                     phase = 0
+                    firstSide = 0
                     returning = false
                     armed = false
                     stageStartedAt = 0
                     if !captureDone && index == captureAfterGesture { pausedForCapture = true }
                 } else {
-                    baselineYaw = yaw
-                    baselinePitch = pitch
-                    baselineRoll = roll
+                    let frames = CGFloat(neutralFrames)
+                    baselineYaw = neutralSumYaw / frames
+                    baselinePitch = neutralSumPitch / frames
+                    baselineRoll = neutralSumRoll / frames
                     baselineSet = true
                     armed = true
+                    phase = 0
+                    firstSide = 0
                     stageStartedAt = now
                 }
                 clearNeutral()
@@ -260,37 +338,56 @@ final class FaceGestureTracker {
             return progress
         }
 
-        let gesture = gestures[index]
-        let relativeYaw = yaw - baselineYaw
-        let relativePitch = pitch - baselinePitch
-        if gesture == .nod {
-            let angle = relativePitch
-            if phase == 0 {
-                if holdAction(angle > Self.verticalNodDegrees, now: now) {
-                    beginPhaseFeedback(now: now, completesGesture: false)
-                    clearAction()
-                }
-            } else if holdAction(angle < -Self.verticalNodDegrees, now: now) {
+        if gesture == .nod || gesture == .shake {
+            performSwing(angle: gesture == .nod ? relativePitch : relativeYaw,
+                         threshold: gesture == .nod ? Self.nodDegrees : Self.shakeDegrees,
+                         now: now)
+        } else {
+            let holding = actionFrames > 0
+            let condition = holding
+                ? sustains(gesture, pitch: relativePitch, leftEye: leftEye,
+                           rightEye: rightEye, smile: smile, mouthOpenRatio: mouthOpenRatio)
+                : starts(gesture, pitch: relativePitch, leftEye: leftEye,
+                         rightEye: rightEye, smile: smile, mouthOpenRatio: mouthOpenRatio)
+            let hold = gesture == .blink ? Self.blinkHold : Self.actionHold
+            if holdAction(condition, now: now, requiredHold: hold) {
                 beginPhaseFeedback(now: now, completesGesture: true)
             }
-        } else if gesture == .shake {
-            let angle = relativeYaw
-            if phase == 0 {
-                if holdAction(angle < -Self.horizontalTurnDegrees, now: now) {
-                    beginPhaseFeedback(now: now, completesGesture: false)
-                    clearAction()
-                }
-            } else if holdAction(
-                angle > Self.horizontalTurnDegrees, now: now
-            ) {
-                beginPhaseFeedback(now: now, completesGesture: true)
-            }
-        } else if holdAction(matches(gesture, yaw: relativeYaw, pitch: relativePitch,
-                                     leftEye: leftEye, rightEye: rightEye, smile: smile,
-                                     mouthOpenRatio: mouthOpenRatio), now: now) {
-            beginPhaseFeedback(now: now, completesGesture: true)
         }
         return progress
+    }
+
+    private func performSwing(angle: CGFloat, threshold: CGFloat, now: CFTimeInterval) {
+        if phase == 0 {
+            if actionFrames == 0 { actionSide = angle >= 0 ? 1 : -1 }
+            let side = CGFloat(actionSide)
+            let condition = actionFrames == 0
+                ? abs(angle) > threshold
+                : side * angle > threshold * Self.holdHysteresis
+            if actionFrames > 0 && side * angle > side * swingPeak {
+                swingPeak = angle
+            } else if actionFrames == 0 {
+                swingPeak = angle
+            }
+            if holdAction(condition, now: now, requiredHold: Self.swingHold) {
+                firstSide = actionSide
+                phase = 1
+                clearAction()
+                beginPhaseFeedback(now: now, completesGesture: false)
+            }
+            return
+        }
+        // Keep following the first peak while the head is still travelling that way.
+        let side = CGFloat(firstSide)
+        if side * angle > side * swingPeak { swingPeak = angle }
+        let opposite = -side * angle
+        let travel = abs(swingPeak - angle)
+        let factor: CGFloat = actionFrames > 0 ? Self.holdHysteresis : 1
+        let condition = opposite > threshold * Self.swingOppositeFactor * factor
+            && travel > threshold * Self.swingRangeFactor * factor
+        if holdAction(condition, now: now, requiredHold: Self.swingHold) {
+            beginPhaseFeedback(now: now, completesGesture: true)
+        }
     }
 
     func tick(now: CFTimeInterval) -> FaceGestureProgress {
@@ -299,15 +396,13 @@ final class FaceGestureTracker {
             if now < retryUntil { return progress }
             resetCore()
         }
-        if phaseFeedbackUntil != 0 {
-            if now < phaseFeedbackUntil { return progress }
+        if phaseFeedbackUntil != 0 && now >= phaseFeedbackUntil {
             let completesGesture = phaseFeedbackCompletesGesture
             phaseFeedbackUntil = 0
             phaseFeedbackCompletesGesture = false
-            clearAction()
             if completesGesture { completeAction(now: now) }
-            else { phase = 1 }
         }
+        if phaseFeedbackUntil != 0 && phaseFeedbackCompletesGesture { return progress }
         if returning && now - stageStartedAt > neutralTimeout { beginRetry(now: now) }
         else if armed && !returning && now - stageStartedAt > gestureTimeout {
             beginRetry(now: now)
@@ -321,6 +416,7 @@ final class FaceGestureTracker {
         armed = false
         returning = false
         phase = 0
+        firstSide = 0
         phaseFeedbackUntil = 0
         phaseFeedbackCompletesGesture = false
         stageStartedAt = 0
@@ -346,6 +442,8 @@ final class FaceGestureTracker {
     private func resetCore() {
         index = 0
         phase = 0
+        firstSide = 0
+        swingPeak = 0
         phaseFeedbackUntil = 0
         phaseFeedbackCompletesGesture = false
         armed = false
@@ -358,6 +456,7 @@ final class FaceGestureTracker {
         baselineYaw = 0
         baselinePitch = 0
         baselineRoll = 0
+        smoothingReady = false
         lastYaw = 0
         lastPitch = 0
         lastRoll = 0
@@ -365,33 +464,104 @@ final class FaceGestureTracker {
         lastRightEye = nil
         lastSmile = nil
         lastMouthOpenRatio = 0
+        lastCaptureAllowed = true
         clearNeutral()
         clearAction()
     }
 
+    private func relative(_ value: CGFloat, _ baseline: CGFloat) -> CGFloat {
+        return baselineSet ? value - baseline : value
+    }
+
+    private static func poseNeutral(yaw: CGFloat, pitch: CGFloat, roll: CGFloat) -> Bool {
+        return abs(yaw) < neutralYawPitchDegrees
+            && abs(pitch) < neutralYawPitchDegrees
+            && abs(roll) < neutralRollDegrees
+    }
+
+    /// Neutral pose required before a gesture starts: pose plus the gesture's own rest state.
+    private func armNeutral(_ gesture: FaceGesture, yaw: CGFloat, pitch: CGFloat,
+                            roll: CGFloat) -> Bool {
+        guard Self.poseNeutral(yaw: yaw, pitch: pitch, roll: roll) else { return false }
+        switch gesture {
+        case .openMouth: return lastMouthOpenRatio < Self.mouthClosedRatio
+        case .smile: return lastSmile == nil || lastSmile! < Self.smileOff
+        case .blink:
+            return (lastLeftEye == nil || lastLeftEye! > Self.eyesOpen)
+                && (lastRightEye == nil || lastRightEye! > Self.eyesOpen)
+        default: return true
+        }
+    }
+
+    /// Neutral pose required before the photo; mirrors the still validator limits.
+    private func captureNeutral(_ gesture: FaceGesture, yaw: CGFloat, pitch: CGFloat,
+                                roll: CGFloat) -> Bool {
+        guard Self.poseNeutral(yaw: yaw, pitch: pitch, roll: roll) else { return false }
+        if enforceCapturePose && (abs(lastYaw) >= Self.captureYawPitchDegrees
+            || abs(lastPitch) >= Self.captureYawPitchDegrees
+            || abs(lastRoll) >= Self.captureRollDegrees) { return false }
+        if lastMouthOpenRatio >= Self.mouthCaptureRatio { return false }
+        if let left = lastLeftEye, left < Self.eyesCapture { return false }
+        if let right = lastRightEye, right < Self.eyesCapture { return false }
+        return gesture != .smile || lastSmile == nil || lastSmile! < Self.smileCapture
+    }
+
+    private func starts(_ gesture: FaceGesture, pitch: CGFloat, leftEye: CGFloat?,
+                        rightEye: CGFloat?, smile: CGFloat?,
+                        mouthOpenRatio: CGFloat) -> Bool {
+        switch gesture {
+        case .openMouth: return mouthOpenRatio > Self.mouthOpenRatio
+        case .blink:
+            guard let left = leftEye, let right = rightEye else { return false }
+            return left < Self.eyesClosed && right < Self.eyesClosed
+        case .smile: return smile != nil && smile! > Self.smileOn
+        case .lookUp: return pitch > Self.lookUpDegrees
+        case .lookDown: return pitch < -Self.lookDownDegrees
+        default: return false
+        }
+    }
+
+    private func sustains(_ gesture: FaceGesture, pitch: CGFloat, leftEye: CGFloat?,
+                          rightEye: CGFloat?, smile: CGFloat?,
+                          mouthOpenRatio: CGFloat) -> Bool {
+        switch gesture {
+        case .openMouth: return mouthOpenRatio > Self.mouthClosedRatio
+        case .blink:
+            guard let left = leftEye, let right = rightEye else { return false }
+            return left < Self.eyesOpen && right < Self.eyesOpen
+        case .smile: return smile != nil && smile! > Self.smileOn * Self.holdHysteresis + 0.05
+        case .lookUp: return pitch > Self.lookUpDegrees * Self.holdHysteresis
+        case .lookDown: return pitch < -Self.lookDownDegrees * Self.holdHysteresis
+        default: return false
+        }
+    }
+
     private func debugSnapshot(gesture: FaceGesture,
                                stage: FaceGestureStage) -> FaceGestureDebug {
-        let relativeYaw = baselineSet ? lastYaw - baselineYaw : lastYaw
-        let relativePitch = baselineSet ? lastPitch - baselinePitch : lastPitch
-        let relativeRoll = baselineSet ? lastRoll - baselineRoll : lastRoll
+        let relativeYaw = relative(lastYaw, baselineYaw)
+        let relativePitch = relative(lastPitch, baselinePitch)
+        let relativeRoll = relative(lastRoll, baselineRoll)
         let phaseCount = gesture == .nod || gesture == .shake ? 2 : 1
+        // While the first-half feedback is visible keep reporting phase 0 so the overlay
+        // marks that half as accepted, even though detection already moved on.
+        let reportedPhase = phaseFeedbackUntil != 0 && !phaseFeedbackCompletesGesture
+            ? max(0, phase - 1) : phase
         if stage == .waitingNeutral || stage == .returnNeutral {
-            let neutral = abs(relativeYaw) < Self.initialNeutralYawPitchDegrees
-                && abs(relativePitch) < Self.initialNeutralYawPitchDegrees
-                && abs(relativeRoll) < Self.initialNeutralRollDegrees
-                && lastMouthOpenRatio < 0.035
-                && (lastLeftEye == nil || lastLeftEye! > 0.50)
-                && (lastRightEye == nil || lastRightEye! > 0.50)
-                && (lastSmile == nil || lastSmile! < 0.48)
+            let neutral = stage == .returnNeutral
+                ? captureNeutral(gesture, yaw: relativeYaw, pitch: relativePitch,
+                                 roll: relativeRoll) && lastCaptureAllowed
+                : armNeutral(gesture, yaw: relativeYaw, pitch: relativePitch,
+                             roll: relativeRoll)
             let required = stage == .returnNeutral
                 ? Self.returnNeutralHold : Self.armNeutralHold
             return FaceGestureDebug(
-                phase: phase, phaseCount: phaseCount, metric: .neutral,
+                phase: reportedPhase, phaseCount: phaseCount, metric: .neutral,
                 baselineSet: baselineSet, rawPrimary: 0, rawSecondary: nil,
                 baseline: 0, relative: 0, target: 0, lessThan: false,
                 satisfied: neutral, heldMs: elapsedMs(since: neutralSince),
-                requiredHoldMs: Int(required * 1000), relativeYaw: relativeYaw,
-                relativePitch: relativePitch, relativeRoll: relativeRoll
+                requiredHoldMs: Int((required * 1000).rounded()), relativeYaw: relativeYaw,
+                relativePitch: relativePitch, relativeRoll: relativeRoll,
+                firstSide: firstSide
             )
         }
 
@@ -403,61 +573,68 @@ final class FaceGestureTracker {
         var target: CGFloat = 0
         var lessThan = false
         var satisfied = false
+        var requiredHold = Self.actionHold
         switch gesture {
-        case .nod:
-            metric = .pitch
-            rawPrimary = lastPitch
-            baseline = baselinePitch
-            relative = relativePitch
-            target = phase == 0 ? Self.verticalNodDegrees : -Self.verticalNodDegrees
-            lessThan = phase != 0
-            satisfied = lessThan ? relative < target : relative > target
-        case .shake:
-            metric = .yaw
-            rawPrimary = lastYaw
-            baseline = baselineYaw
-            relative = relativeYaw
-            target = phase == 0 ? -Self.horizontalTurnDegrees : Self.horizontalTurnDegrees
-            lessThan = phase == 0
-            satisfied = lessThan ? relative < target : relative > target
+        case .nod, .shake:
+            let nod = gesture == .nod
+            let threshold = nod ? Self.nodDegrees : Self.shakeDegrees
+            metric = nod ? .pitch : .yaw
+            rawPrimary = nod ? lastPitch : lastYaw
+            baseline = nod ? baselinePitch : baselineYaw
+            relative = nod ? relativePitch : relativeYaw
+            requiredHold = Self.swingHold
+            if firstSide == 0 {
+                let side: CGFloat = relative >= 0 ? 1 : -1
+                target = side * threshold
+                lessThan = side < 0
+                satisfied = abs(relative) > threshold
+            } else {
+                let side = CGFloat(firstSide)
+                target = -side * threshold * Self.swingOppositeFactor
+                lessThan = firstSide > 0
+                satisfied = -side * relative > threshold * Self.swingOppositeFactor
+                    && abs(swingPeak - relative) > threshold * Self.swingRangeFactor
+            }
         case .lookUp, .lookDown:
             metric = .pitch
             rawPrimary = lastPitch
             baseline = baselinePitch
             relative = relativePitch
-            target = gesture == .lookUp ? 15 : -15
+            target = gesture == .lookUp ? Self.lookUpDegrees : -Self.lookDownDegrees
             lessThan = gesture == .lookDown
             satisfied = lessThan ? relative < target : relative > target
         case .openMouth:
             metric = .mouth
             rawPrimary = lastMouthOpenRatio
             relative = rawPrimary
-            target = 0.055
+            target = Self.mouthOpenRatio
             satisfied = relative > target
         case .smile:
             metric = .smile
             rawPrimary = lastSmile ?? -1
             relative = rawPrimary
-            target = 0.72
+            target = Self.smileOn
             satisfied = relative > target
         case .blink:
             metric = .eyes
             rawPrimary = lastLeftEye ?? -1
             rawSecondary = lastRightEye
             relative = max(rawPrimary, rawSecondary ?? -1)
-            target = 0.32
+            target = Self.eyesClosed
             lessThan = true
+            requiredHold = Self.blinkHold
             satisfied = rawPrimary >= 0 && rawSecondary != nil
                 && rawPrimary < target && rawSecondary! < target
         }
         return FaceGestureDebug(
-            phase: phase, phaseCount: phaseCount, metric: metric,
+            phase: reportedPhase, phaseCount: phaseCount, metric: metric,
             baselineSet: baselineSet, rawPrimary: rawPrimary,
             rawSecondary: rawSecondary, baseline: baseline, relative: relative,
             target: target, lessThan: lessThan, satisfied: satisfied,
-            heldMs: elapsedMs(since: actionSince), requiredHoldMs: 160,
+            heldMs: elapsedMs(since: actionSince),
+            requiredHoldMs: Int((requiredHold * 1000).rounded()),
             relativeYaw: relativeYaw, relativePitch: relativePitch,
-            relativeRoll: relativeRoll
+            relativeRoll: relativeRoll, firstSide: firstSide
         )
     }
 
@@ -476,14 +653,18 @@ final class FaceGestureTracker {
         guard condition else { clearNeutral(); return false }
         if neutralFrames == 0 { neutralSince = now }
         neutralFrames += 1
-        return neutralFrames >= 3 && now - neutralSince >= requiredHold
+        neutralSumYaw += lastYaw
+        neutralSumPitch += lastPitch
+        neutralSumRoll += lastRoll
+        return neutralFrames >= Self.minNeutralFrames && now - neutralSince >= requiredHold
     }
 
-    private func holdAction(_ condition: Bool, now: CFTimeInterval) -> Bool {
+    private func holdAction(_ condition: Bool, now: CFTimeInterval,
+                            requiredHold: CFTimeInterval) -> Bool {
         guard condition else { clearAction(); return false }
         if actionFrames == 0 { actionSince = now }
         actionFrames += 1
-        return actionFrames >= 2 && now - actionSince >= 0.16
+        return actionFrames >= Self.minActionFrames && now - actionSince >= requiredHold
     }
 
     private func completeAction(now: CFTimeInterval) {
@@ -498,26 +679,16 @@ final class FaceGestureTracker {
     private func beginPhaseFeedback(now: CFTimeInterval, completesGesture: Bool) {
         phaseFeedbackUntil = now + Self.phaseFeedbackDuration
         phaseFeedbackCompletesGesture = completesGesture
-        if !completesGesture && stageStartedAt > 0 {
-            stageStartedAt += Self.phaseFeedbackDuration
-        }
     }
 
-    private func matches(_ gesture: FaceGesture, yaw: CGFloat, pitch: CGFloat,
-                         leftEye: CGFloat?, rightEye: CGFloat?, smile: CGFloat?,
-                         mouthOpenRatio: CGFloat) -> Bool {
-        switch gesture {
-        case .openMouth: return mouthOpenRatio > 0.055
-        case .blink:
-            return leftEye != nil && rightEye != nil && leftEye! < 0.32 && rightEye! < 0.32
-        case .smile: return smile != nil && smile! > 0.72
-        case .lookUp: return pitch > 15
-        case .lookDown: return pitch < -15
-        default: return false
-        }
+    private func clearNeutral() {
+        neutralSince = 0
+        neutralFrames = 0
+        neutralSumYaw = 0
+        neutralSumPitch = 0
+        neutralSumRoll = 0
     }
 
-    private func clearNeutral() { neutralSince = 0; neutralFrames = 0 }
     private func clearAction() { actionSince = 0; actionFrames = 0 }
 }
 
@@ -688,6 +859,9 @@ struct FaceCaptureAnalysis {
     let centeringVerticalOffset: CGFloat
     let centeringAvailable: Bool
     let centeringAccepted: Bool
+    /// Device verticality sampled on the analysis queue for this frame, so the main thread
+    /// never reads `deviceVerticalReady` without synchronization.
+    var deviceUpright: Bool = true
 }
 
 struct FaceCaptureResult {

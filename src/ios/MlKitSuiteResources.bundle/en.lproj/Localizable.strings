@@ -36,6 +36,8 @@
 "face_gesture_nod_down" = "Now tilt it downward briefly";
 "face_gesture_shake_right" = "Turn your head slightly to the right";
 "face_gesture_shake_left" = "Now turn your head slightly to the left";
+"face_gesture_nod_up_now" = "Now tilt it upward briefly";
+"face_gesture_shake_right_now" = "Now turn your head slightly to the right";
 "face_gesture_capture_candidate" = "Hold still — taking your selfie";
 "face_gesture_retry" = "Let’s try again";
 "face_gestures_complete" = "Gestures completed";
